@@ -8,7 +8,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	stream "github.com/stanfordio/skyfall/pkg"
+	"github.com/dgraph-io/ristretto"
+	hydrator "github.com/stanfordio/skyfall/pkg/hydrator"
+	stream "github.com/stanfordio/skyfall/pkg/stream"
 	"github.com/urfave/cli/v2"
 
 	log "github.com/sirupsen/logrus"
@@ -46,11 +48,34 @@ func run(args []string) {
 			Usage: "full websocket path to the ATProto SubscribeRepos XRPC endpoint",
 			Value: "wss://bsky.network/xrpc/com.atproto.sync.subscribeRepos",
 		},
+		&cli.Int64Flag{
+			Name:  "cache-size",
+			Usage: "maximum size of the cache, in bytes",
+			Value: 1 << 32,
+		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func makeHydrator(cctx *cli.Context) (*hydrator.Hydrator, error) {
+	cache, err := ristretto.NewCache(&ristretto.Config{
+		NumCounters: 1e8, // number of keys to track frequency of
+		MaxCost:     cctx.Int64("cache-size"),
+		BufferItems: 64, // number of keys per Get buffer
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cache: %+v", err)
+	}
+
+	h := hydrator.Hydrator{
+		Cache: cache,
+	}
+
+	return &h, nil
 }
 
 func streamCmd(cctx *cli.Context) error {
@@ -67,9 +92,15 @@ func streamCmd(cctx *cli.Context) error {
 		log.Fatalf("failed to parse ws-url: %+v", err)
 	}
 
+	hydrator, err := makeHydrator(cctx)
+	if err != nil {
+		log.Fatalf("failed to create hydrator: %+v", err)
+	}
+
 	s := stream.Stream{
 		SocketURL: u,
-		Events:    make(chan string),
+		Output:    make(chan []byte),
+		Hydrator:  hydrator,
 	}
 
 	go func() {
@@ -80,8 +111,8 @@ func streamCmd(cctx *cli.Context) error {
 
 	go func() {
 		for {
-			e := <-s.Events
-			fmt.Printf(e)
+			e := <-s.Output
+			fmt.Println(string(e))
 		}
 	}()
 
