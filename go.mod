@@ -6,6 +6,7 @@ require (
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de
 	github.com/bluesky-social/indigo v0.0.0-20231111192810-4e474e99e30d
 	github.com/urfave/cli/v2 v2.25.7
+	github.com/sirupsen/logrus v1.9.3
 )
 
 require (
