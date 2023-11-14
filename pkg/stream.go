@@ -57,10 +57,8 @@ func (s *Stream) BeginStreaming(ctx context.Context, workerCount int) error {
 		cancel()
 	}()
 
-	select {
-	case <-ctx.Done():
-		log.Infof("shutting down...")
-	}
+	<-ctx.Done()
+	log.Infof("shutting down...")
 
 	return nil
 }
@@ -72,13 +70,13 @@ func (s *Stream) HandleStreamEvent(ctx context.Context, xe *events.XRPCStreamEve
 
 	if xe.RepoCommit != nil {
 		return s.HandleRepoCommit(ctx, xe.RepoCommit)
+	} else {
+		log.Warnf("unknown stream event: %+v", xe)
 	}
 	return nil
 }
 
 func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubscribeRepos_Commit) error {
-	// TODO: Actually do something with the event. Below is copied from the Sonar command.
-
 	rr, err := repo.ReadRepoFromCar(ctx, bytes.NewReader(evt.Blocks))
 	if err != nil {
 		log.Warnf("failed to read repo from car: %+v", err)
