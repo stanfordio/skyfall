@@ -5,12 +5,14 @@ package stream
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/repo"
 	"github.com/bluesky-social/indigo/repomgr"
 	log "github.com/sirupsen/logrus"
@@ -22,12 +24,14 @@ import (
 	"github.com/bluesky-social/indigo/events/schedulers/autoscaling"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
 	"github.com/gorilla/websocket"
+	hydrator "github.com/stanfordio/skyfall/pkg/hydrator"
 )
 
 type Stream struct {
 	// SocketURL is the full websocket path to the ATProto SubscribeRepos XRPC endpoint
 	SocketURL *url.URL
-	Events    chan string // TODO: structured data
+	Output    chan []byte
+	Hydrator  *hydrator.Hydrator
 }
 
 func (s *Stream) BeginStreaming(ctx context.Context, workerCount int) error {
@@ -117,13 +121,33 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 
 			// Unpack the record and process it
 			switch rec := rec.(type) {
+			case *bsky.FeedPost:
+
+			case *bsky.FeedLike:
+
+			case *bsky.FeedRepost:
+
+			case *bsky.GraphBlock:
+
+			case *bsky.GraphFollow:
+
+			case *bsky.ActorProfile:
+
 			default:
 				log_wf.Warnf("unknown record type: %+v", rec)
 			}
 
-			s.Events <- fmt.Sprintf("event: %+v", rec)
+			val, err := json.Marshal(rec)
+
+			if err != nil {
+				log.Warnf("failed to marshal record: %+v", err)
+				return err
+			}
+
+			s.Output <- val
 
 		case repomgr.EvtKindDeleteRecord:
+			log.Warnf("delete record not implemented yet")
 		default:
 			log.Warnf("unknown event kind from op action: %+v", op.Action)
 		}
