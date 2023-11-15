@@ -8,6 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/bluesky-social/indigo/xrpc"
+	"github.com/stanfordio/skyfall/pkg/auth"
 	"github.com/stanfordio/skyfall/pkg/hydrator"
 	stream "github.com/stanfordio/skyfall/pkg/stream"
 	"github.com/urfave/cli/v2"
@@ -52,11 +54,36 @@ func run(args []string) {
 			Usage: "maximum size of the cache, in bytes",
 			Value: 1 << 32,
 		},
+		&cli.StringFlag{
+			Name:  "handle",
+			Usage: "handle to authenticate with, e.g., @miles.land or @det.bsky.social",
+		},
+		&cli.StringFlag{
+			Name:  "password",
+			Usage: "password to authenticate with",
+		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func authenticate(cctx *cli.Context) (*xrpc.AuthInfo, error) {
+	authenticator, err := auth.MakeAuthenticator(cctx.Context)
+
+	if err != nil {
+		log.Fatalf("failed to create authenticator: %+v", err)
+		return nil, err
+	}
+
+	authInfo, err := authenticator.Authenticate(cctx.String("handle"), cctx.String("password"))
+	if err != nil {
+		log.Fatalf("failed to authenticate: %+v", err)
+		return nil, err
+	}
+
+	return authInfo, nil
 }
 
 func streamCmd(cctx *cli.Context) error {
@@ -68,14 +95,23 @@ func streamCmd(cctx *cli.Context) error {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 
+	// Create a client
+	authInfo, err := authenticate(cctx)
+	if err != nil {
+		log.Fatalf("failed to authenticate: %+v", err)
+		return err
+	}
+
 	u, err := url.Parse(fmt.Sprintf("wss://%s/xrpc/com.atproto.sync.subscribeRepos", cctx.String("host-domain")))
 	if err != nil {
 		log.Fatalf("failed to parse ws-url: %+v", err)
+		return err
 	}
 
-	hydrator, err := hydrator.MakeHydrator(cctx.Context, cctx.Int64("cache-size"), cctx.String("host-domain"))
+	hydrator, err := hydrator.MakeHydrator(cctx.Context, cctx.Int64("cache-size"), cctx.String("host-domain"), authInfo)
 	if err != nil {
 		log.Fatalf("failed to create hydrator: %+v", err)
+		return err
 	}
 
 	s := stream.Stream{

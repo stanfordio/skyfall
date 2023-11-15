@@ -43,13 +43,13 @@ func (s *Stream) BeginStreaming(ctx context.Context, workerCount int) error {
 
 	pool := autoscaling.NewScheduler(scalingSettings, s.SocketURL.Host, s.HandleStreamEvent)
 
-	log.Infof("connecting to WebSocket at: %s", s.SocketURL.String())
+	log.Infof("Connecting to WebSocket at: %s", s.SocketURL.String())
 	c, _, err := websocket.DefaultDialer.Dial(s.SocketURL.String(), http.Header{
 		"User-Agent": []string{"sonar/1.0"},
 	})
 
 	if err != nil {
-		log.Infof("failed to connect to websocket: %v", err)
+		log.Infof("Failed to connect to websocket: %v", err)
 		return err
 	}
 	defer c.Close()
@@ -61,20 +61,20 @@ func (s *Stream) BeginStreaming(ctx context.Context, workerCount int) error {
 	}()
 
 	<-ctx.Done()
-	log.Infof("shutting down...")
+	log.Infof("Shutting down...")
 
 	return nil
 }
 
 func (s *Stream) HandleStreamEvent(ctx context.Context, xe *events.XRPCStreamEvent) error {
 	if xe.Error != nil {
-		log.Errorf("error handling stream event: %+v", xe.Error)
+		log.Errorf("Error handling stream event: %+v", xe.Error)
 	}
 
 	if xe.RepoCommit != nil {
 		return s.HandleRepoCommit(ctx, xe.RepoCommit)
 	} else {
-		log.Warnf("unknown stream event: %+v", xe)
+		log.Warnf("Unknown stream event: %+v", xe)
 	}
 	return nil
 }
@@ -82,17 +82,8 @@ func (s *Stream) HandleStreamEvent(ctx context.Context, xe *events.XRPCStreamEve
 func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubscribeRepos_Commit) (error error) {
 	rr, err := repo.ReadRepoFromCar(ctx, bytes.NewReader(evt.Blocks))
 	if err != nil {
-		log.Warnf("failed to read repo from car: %+v", err)
+		log.Warnf("Failed to read repo from car: %+v", err)
 		return nil
-	}
-
-	// Parse time from the event time string
-	evtCreatedAt, err := time.Parse(time.RFC3339, evt.Time)
-	if err != nil {
-		log.Warnf("error parsing time: %+v", err)
-		return nil
-	} else {
-		log.Infof("event created at: %+v", evtCreatedAt)
 	}
 
 	// Extract the actor (i.e., whose repo is this?)
@@ -112,7 +103,7 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 			rc, rec, err := rr.GetRecord(ctx, op.Path)
 			if err != nil {
 				e := fmt.Errorf("getting record %s (%s) within seq %d for %s: %w", op.Path, *op.Cid, evt.Seq, evt.Repo, err)
-				log_wf.Errorf("failed to get a record from the event: %+v", e)
+				log_wf.Errorf("Failed to get a record from the event: %+v", e)
 				error = e
 				break
 			}
@@ -120,7 +111,7 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 			// Verify that the record cid matches the cid in the event
 			if lexutil.LexLink(rc) != *op.Cid {
 				e := fmt.Errorf("mismatch in record and op cid: %s != %s", rc, *op.Cid)
-				log_wf.Errorf("failed to LexLink the record in the event: %+v", e)
+				log_wf.Errorf("Failed to LexLink the record in the event: %+v", e)
 				error = e
 				break
 			}
@@ -128,23 +119,23 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 			// Hydrate the record
 			hydrated, err := s.Hydrator.Hydrate(rec, actorDid)
 			if err != nil {
-				log_wf.Errorf("failed to hydrate record: %+v", err)
+				log_wf.Errorf("Failed to hydrate record: %+v", err)
 				error = err
 			}
 
 			val, err := json.Marshal(hydrated)
 
 			if err != nil {
-				log.Errorf("failed to marshal record: %+v", err)
+				log.Errorf("Failed to marshal record: %+v", err)
 				break
 			}
 
 			s.Output <- val
 
 		case repomgr.EvtKindDeleteRecord:
-			log.Warnf("delete record not implemented yet")
+			log.Warnf("Delete record not implemented yet")
 		default:
-			log.Warnf("unknown event kind from op action: %+v", op.Action)
+			log.Warnf("Unknown event kind from op action: %+v", op.Action)
 		}
 	}
 
