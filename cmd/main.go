@@ -8,8 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/dgraph-io/ristretto"
-	hydrator "github.com/stanfordio/skyfall/pkg/hydrator"
+	"github.com/stanfordio/skyfall/pkg/hydrator"
 	stream "github.com/stanfordio/skyfall/pkg/stream"
 	"github.com/urfave/cli/v2"
 
@@ -35,7 +34,7 @@ func run(args []string) {
 					&cli.IntFlag{
 						Name:  "worker-count",
 						Usage: "number of workers to scale to",
-						Value: 4,
+						Value: 32,
 					},
 				},
 			},
@@ -44,9 +43,9 @@ func run(args []string) {
 
 	app.Flags = []cli.Flag{
 		&cli.StringFlag{
-			Name:  "ws-url",
-			Usage: "full websocket path to the ATProto SubscribeRepos XRPC endpoint",
-			Value: "wss://bsky.network/xrpc/com.atproto.sync.subscribeRepos",
+			Name:  "host-domain",
+			Usage: "host domain for the xrpc client",
+			Value: "bsky.network",
 		},
 		&cli.Int64Flag{
 			Name:  "cache-size",
@@ -60,24 +59,6 @@ func run(args []string) {
 	}
 }
 
-func makeHydrator(cctx *cli.Context) (*hydrator.Hydrator, error) {
-	cache, err := ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e8, // number of keys to track frequency of
-		MaxCost:     cctx.Int64("cache-size"),
-		BufferItems: 64, // number of keys per Get buffer
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cache: %+v", err)
-	}
-
-	h := hydrator.Hydrator{
-		Cache: cache,
-	}
-
-	return &h, nil
-}
-
 func streamCmd(cctx *cli.Context) error {
 	ctx := cctx.Context
 	ctx, cancel := context.WithCancel(ctx)
@@ -87,12 +68,12 @@ func streamCmd(cctx *cli.Context) error {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 
-	u, err := url.Parse(cctx.String("ws-url"))
+	u, err := url.Parse(fmt.Sprintf("wss://%s/xrpc/com.atproto.sync.subscribeRepos", cctx.String("host-domain")))
 	if err != nil {
 		log.Fatalf("failed to parse ws-url: %+v", err)
 	}
 
-	hydrator, err := makeHydrator(cctx)
+	hydrator, err := hydrator.MakeHydrator(cctx.Context, cctx.Int64("cache-size"), cctx.String("host-domain"))
 	if err != nil {
 		log.Fatalf("failed to create hydrator: %+v", err)
 	}

@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
-	"github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/repo"
 	"github.com/bluesky-social/indigo/repomgr"
 	log "github.com/sirupsen/logrus"
@@ -80,7 +79,7 @@ func (s *Stream) HandleStreamEvent(ctx context.Context, xe *events.XRPCStreamEve
 	return nil
 }
 
-func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubscribeRepos_Commit) error {
+func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubscribeRepos_Commit) (error error) {
 	rr, err := repo.ReadRepoFromCar(ctx, bytes.NewReader(evt.Blocks))
 	if err != nil {
 		log.Warnf("failed to read repo from car: %+v", err)
@@ -96,6 +95,11 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 		log.Infof("event created at: %+v", evtCreatedAt)
 	}
 
+	// Extract the actor (i.e., whose repo is this?)
+	actorDid := rr.RepoDid()
+
+	error = nil
+
 	for _, op := range evt.Ops {
 		collection := strings.Split(op.Path, "/")[0]
 
@@ -109,6 +113,7 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 			if err != nil {
 				e := fmt.Errorf("getting record %s (%s) within seq %d for %s: %w", op.Path, *op.Cid, evt.Seq, evt.Repo, err)
 				log_wf.Errorf("failed to get a record from the event: %+v", e)
+				error = e
 				break
 			}
 
@@ -116,32 +121,22 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 			if lexutil.LexLink(rc) != *op.Cid {
 				e := fmt.Errorf("mismatch in record and op cid: %s != %s", rc, *op.Cid)
 				log_wf.Errorf("failed to LexLink the record in the event: %+v", e)
+				error = e
 				break
 			}
 
-			// Unpack the record and process it
-			switch rec := rec.(type) {
-			case *bsky.FeedPost:
-
-			case *bsky.FeedLike:
-
-			case *bsky.FeedRepost:
-
-			case *bsky.GraphBlock:
-
-			case *bsky.GraphFollow:
-
-			case *bsky.ActorProfile:
-
-			default:
-				log_wf.Warnf("unknown record type: %+v", rec)
+			// Hydrate the record
+			hydrated, err := s.Hydrator.Hydrate(rec, actorDid)
+			if err != nil {
+				log_wf.Errorf("failed to hydrate record: %+v", err)
+				error = err
 			}
 
-			val, err := json.Marshal(rec)
+			val, err := json.Marshal(hydrated)
 
 			if err != nil {
-				log.Warnf("failed to marshal record: %+v", err)
-				return err
+				log.Errorf("failed to marshal record: %+v", err)
+				break
 			}
 
 			s.Output <- val
@@ -153,5 +148,5 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 		}
 	}
 
-	return nil
+	return
 }
