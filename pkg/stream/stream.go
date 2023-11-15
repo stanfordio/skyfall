@@ -133,7 +133,7 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 			s.Output <- val
 
 		case repomgr.EvtKindDeleteRecord:
-			log.Warnf("Delete record not implemented yet")
+			log.Warnf("Delete record not implemented yet: %+c", op)
 		default:
 			log.Warnf("Unknown event kind from op action: %+v", op.Action)
 		}
