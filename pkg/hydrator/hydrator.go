@@ -162,7 +162,7 @@ func (h *Hydrator) Hydrate(val interface{}, actorDid string) (result map[string]
 	result["_ActorProfile"] = profile
 
 	// Add the pulled time to the map, iso8601
-	result["_Pulled"] = time.Now().Format(time.RFC3339)
+	result["_PulledTimestamp"] = time.Now().Format(time.RFC3339)
 
 	// Depending on the type, add additional information
 	switch val := val.(type) {

@@ -123,6 +123,9 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 				error = err
 			}
 
+			// Log the action performed
+			hydrated["_Action"] = op.Action
+
 			val, err := json.Marshal(hydrated)
 
 			if err != nil {
@@ -133,7 +136,22 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 			s.Output <- val
 
 		case repomgr.EvtKindDeleteRecord:
-			log.Warnf("Delete record not implemented yet: %+c", op)
+			// Not much we can do here, since we don't have the record anymore; just log the action
+			hydrated, err := s.Hydrator.Hydrate(map[string]interface{}{"_Action": op.Action, "_Item": op.Path, "_Type": strings.Split(op.Path, "/")[0]}, actorDid)
+			if err != nil {
+				log_wf.Errorf("Failed to hydrate record: %+v", err)
+				error = err
+				break
+			}
+
+			val, err := json.Marshal(hydrated)
+
+			if err != nil {
+				log.Errorf("Failed to marshal record: %+v", err)
+				break
+			}
+
+			s.Output <- val
 		default:
 			log.Warnf("Unknown event kind from op action: %+v", op.Action)
 		}
