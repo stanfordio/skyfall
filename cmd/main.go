@@ -51,7 +51,7 @@ func run(args []string) {
 		},
 		&cli.StringFlag{
 			Name:  "handle",
-			Usage: "handle to authenticate with, e.g., @miles.land or @det.bsky.social",
+			Usage: "handle to authenticate with, e.g., miles.land or det.bsky.social",
 		},
 		&cli.StringFlag{
 			Name:  "password",
