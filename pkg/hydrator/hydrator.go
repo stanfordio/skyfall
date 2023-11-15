@@ -25,7 +25,7 @@ type Hydrator struct {
 	IdentityDirectory identity.Directory
 }
 
-func MakeHydrator(ctx context.Context, cacheSize int64, hostDomain string, authInfo *xrpc.AuthInfo) (*Hydrator, error) {
+func MakeHydrator(ctx context.Context, cacheSize int64, authInfo *xrpc.AuthInfo) (*Hydrator, error) {
 	cache, err := ristretto.NewCache(&ristretto.Config{
 		NumCounters: 1e8, // number of keys to track frequency of
 		MaxCost:     cacheSize,
@@ -49,20 +49,6 @@ func MakeHydrator(ctx context.Context, cacheSize int64, hostDomain string, authI
 	}
 
 	return &h, nil
-}
-
-func (h *Hydrator) makeXRPCClientForHost(baseUrl string) *xrpc.Client {
-	// TODO: Cache these
-
-	return &xrpc.Client{
-		Client: h.Client.Client,
-		Host:   baseUrl, // It's called Host, but it's really the base URL
-		Auth:   h.AuthInfo,
-	}
-}
-
-func (h *Hydrator) getXRPCClientForPDS(identity *atpidentity.Identity) *xrpc.Client {
-	return h.makeXRPCClientForHost(identity.PDSEndpoint())
 }
 
 func (h *Hydrator) lookupIdentity(identifier string) (identity *atpidentity.Identity, err error) {
@@ -93,7 +79,21 @@ func (h *Hydrator) lookupIdentity(identifier string) (identity *atpidentity.Iden
 }
 
 func (h *Hydrator) lookupProfileFromIdentity(identity *atpidentity.Identity) (profile *bsky.ActorDefs_ProfileViewDetailed, err error) {
+	// Check the cache first
+	cachedValue, found := h.Cache.Get(identity.Handle.String())
+
+	if found && cachedValue != nil {
+		profile = cachedValue.(*bsky.ActorDefs_ProfileViewDetailed)
+		return
+	}
+
 	profile, err = bsky.ActorGetProfile(h.Context, h.Client, identity.Handle.String())
+
+	// Set the cache
+	if err != nil {
+		h.Cache.SetWithTTL(identity.Handle.String(), profile, 1, time.Duration(1)*time.Hour*24)
+	}
+
 	return
 }
 

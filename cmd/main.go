@@ -44,11 +44,6 @@ func run(args []string) {
 	}
 
 	app.Flags = []cli.Flag{
-		&cli.StringFlag{
-			Name:  "host-domain",
-			Usage: "host domain for the xrpc client",
-			Value: "bsky.network",
-		},
 		&cli.Int64Flag{
 			Name:  "cache-size",
 			Usage: "maximum size of the cache, in bytes",
@@ -102,13 +97,13 @@ func streamCmd(cctx *cli.Context) error {
 		return err
 	}
 
-	u, err := url.Parse(fmt.Sprintf("wss://%s/xrpc/com.atproto.sync.subscribeRepos", cctx.String("host-domain")))
+	u, err := url.Parse("wss://bsky.network/xrpc/com.atproto.sync.subscribeRepos")
 	if err != nil {
 		log.Fatalf("failed to parse ws-url: %+v", err)
 		return err
 	}
 
-	hydrator, err := hydrator.MakeHydrator(cctx.Context, cctx.Int64("cache-size"), cctx.String("host-domain"), authInfo)
+	hydrator, err := hydrator.MakeHydrator(cctx.Context, cctx.Int64("cache-size"), authInfo)
 	if err != nil {
 		log.Fatalf("failed to create hydrator: %+v", err)
 		return err
