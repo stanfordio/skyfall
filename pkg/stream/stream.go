@@ -28,9 +28,10 @@ import (
 
 type Stream struct {
 	// SocketURL is the full websocket path to the ATProto SubscribeRepos XRPC endpoint
-	SocketURL *url.URL
-	Output    chan []byte
-	Hydrator  *hydrator.Hydrator
+	SocketURL   *url.URL
+	Output      chan []byte
+	Hydrator    *hydrator.Hydrator
+	BackfillSeq int64
 }
 
 func (s *Stream) BeginStreaming(ctx context.Context, workerCount int) error {
@@ -43,8 +44,14 @@ func (s *Stream) BeginStreaming(ctx context.Context, workerCount int) error {
 
 	pool := autoscaling.NewScheduler(scalingSettings, s.SocketURL.Host, s.HandleStreamEvent)
 
-	log.Infof("Connecting to WebSocket at: %s", s.SocketURL.String())
-	c, _, err := websocket.DefaultDialer.Dial(s.SocketURL.String(), http.Header{
+	var socketUrl string = s.SocketURL.String()
+	// If we're backfilling, add the backfill seq to the socket url
+	if s.BackfillSeq > 0 {
+		socketUrl = fmt.Sprintf("%s?cursor=%d", socketUrl, s.BackfillSeq)
+	}
+
+	log.Infof("Connecting to WebSocket at: %s", socketUrl)
+	c, _, err := websocket.DefaultDialer.Dial(socketUrl, http.Header{
 		"User-Agent": []string{"sonar/1.0"},
 	})
 
@@ -125,6 +132,9 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 
 			// Log the action performed
 			hydrated["_Action"] = op.Action
+
+			// Include the event sequence number
+			hydrated["_Seq"] = evt.Seq
 
 			val, err := json.Marshal(hydrated)
 
