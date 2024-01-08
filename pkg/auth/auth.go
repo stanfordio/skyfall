@@ -38,8 +38,11 @@ func findPersonalDataServerEndpoint(identifier string) (string, error) {
 
 	identity, err := identity.DefaultDirectory().Lookup(context.TODO(), *resolvedIdentifier)
 	if err != nil {
-		return "", error
+		return "", err
 	}
+
+	// Print the identity
+	log.Infof("Found identity: %+v", identity)
 
 	endpoint := identity.PDSEndpoint()
 
@@ -56,6 +59,9 @@ func (a *Authenticator) Authenticate(identifier string, password string) (*xrpc.
 	if err != nil {
 		return nil, err
 	}
+
+	// Print/format the pds endpoint
+	log.Infof("Authenticating with PDS endpoint: %s", pdsEndpoint)
 
 	// Set the host to the PDS endpoint
 	a.Client.Host = pdsEndpoint

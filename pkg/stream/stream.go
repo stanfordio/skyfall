@@ -5,7 +5,6 @@ package stream
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -29,7 +28,7 @@ import (
 type Stream struct {
 	// SocketURL is the full websocket path to the ATProto SubscribeRepos XRPC endpoint
 	SocketURL   *url.URL
-	Output      chan []byte
+	Output      chan map[string]interface{}
 	Hydrator    *hydrator.Hydrator
 	BackfillSeq int64
 }
@@ -136,14 +135,7 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 			// Include the event sequence number
 			hydrated["_Seq"] = evt.Seq
 
-			val, err := json.Marshal(hydrated)
-
-			if err != nil {
-				log.Errorf("Failed to marshal record: %+v", err)
-				break
-			}
-
-			s.Output <- val
+			s.Output <- hydrated
 
 		case repomgr.EvtKindDeleteRecord:
 			// Not much we can do here, since we don't have the record anymore; just log the action
@@ -154,14 +146,7 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 				break
 			}
 
-			val, err := json.Marshal(hydrated)
-
-			if err != nil {
-				log.Errorf("Failed to marshal record: %+v", err)
-				break
-			}
-
-			s.Output <- val
+			s.Output <- hydrated
 		default:
 			log.Warnf("Unknown event kind from op action: %+v", op.Action)
 		}

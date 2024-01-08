@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"net/url"
 	"os"
 	"os/signal"
@@ -11,8 +10,8 @@ import (
 	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/stanfordio/skyfall/pkg/auth"
 	"github.com/stanfordio/skyfall/pkg/hydrator"
+	"github.com/stanfordio/skyfall/pkg/output"
 	stream "github.com/stanfordio/skyfall/pkg/stream"
-	"github.com/stanfordio/skyfall/pkg/utils"
 	"github.com/urfave/cli/v2"
 
 	log "github.com/sirupsen/logrus"
@@ -44,9 +43,13 @@ func run(args []string) {
 						Usage: "file to write output to (if specified, will attempt to backfill from the most recent event in the file)",
 						Value: "output.jsonl",
 					},
+					&cli.StringFlag{
+						Name:  "output-bq-table",
+						Usage: "name of a BigQuery table to output to in ID form (e.g., dgap_bsky.example_table)",
+					},
 					&cli.Int64Flag{
 						Name:  "backfill-seq",
-						Usage: "seq to backfill from (if specified, will override the seqno extracted from the output file)",
+						Usage: "seq to backfill from (if specified, will override the seqno extracted from the output file/bigquery table)",
 						Value: 0,
 					},
 				},
@@ -120,47 +123,40 @@ func streamCmd(cctx *cli.Context) error {
 		return err
 	}
 
+	outputChannel := make(chan map[string]interface{})
+
+	output, err := output.NewOutput(cctx, outputChannel)
+	if err != nil {
+		log.Fatalf("Failed to create output: %+v", err)
+		return err
+	}
+
+	// Setup the output
+	err = output.Setup()
+	if err != nil {
+		log.Fatalf("Failed to setup output: %+v", err)
+		return err
+	}
+
 	var lastSeq int64 = cctx.Int64("backfill-seq")
 
 	if lastSeq == 0 {
-		log.Infof("No backfill seq specified, so attempting to backfill from the last line of the output file")
-
-		lastLine, err := utils.GetLastLine(cctx.String("output-file"))
+		log.Infof("No backfill seq specified, so attempting to backfill from the last line of the output file...")
+		seqno, err := output.GetBackfillSeqno()
 		if err != nil {
-			log.Warnf("Unable to read last line of output file for backfill: %+v", err)
-			log.Warnf("Continuing without backfill...")
-		}
-
-		// Try to parse the last line as JSON, then pull out the last "seq" field
-		lastData := make(map[string]interface{})
-		err = json.Unmarshal([]byte(lastLine), &lastData)
-		if err != nil {
-			log.Warnf("Unable to parse last line as JSON: %+v", err)
-			log.Warnf("Continuing without backfill...")
-		}
-		lastSeqFloat := lastData["_Seq"]
-		if lastSeqFloat == nil {
-			log.Warnf("Unable to find seq in last line of output file")
+			log.Warnf("Failed to get backfill seqno: %+v", err)
 			log.Warnf("Continuing without backfill...")
 		} else {
-			lastSeq = int64(lastSeqFloat.(float64))
-			log.Infof("Backfilling from inferred seq (from output file): %d", lastSeq)
+			log.Infof("Backfilling from seq: %d", seqno)
+			lastSeq = seqno
 		}
 	} else {
 		log.Infof("Backfilling from provided seq: %d", lastSeq)
 	}
 
-	// Open the file
-	f, err := os.OpenFile(cctx.String("output-file"), os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
-	if err != nil {
-		log.Fatalf("Failed to open output file: %+v", err)
-		return err
-	}
-	defer f.Close()
-
 	s := stream.Stream{
 		SocketURL:   u,
-		Output:      make(chan []byte),
+		Output:      outputChannel,
 		Hydrator:    hydrator,
 		BackfillSeq: lastSeq,
 	}
@@ -171,15 +167,7 @@ func streamCmd(cctx *cli.Context) error {
 		cancel()
 	}()
 
-	go func() {
-		for {
-			e := <-s.Output
-			if _, err := f.Write(append(e, byte('\n'))); err != nil {
-				log.Errorf("Failed to write output: %+v", err)
-				cancel()
-			}
-		}
-	}()
+	go output.StreamOutput(ctx)
 
 	select {
 	case <-signals:
