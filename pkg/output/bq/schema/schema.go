@@ -17,6 +17,11 @@ func GetSchema() bigquery.Schema {
   },
   {
     "mode": "NULLABLE",
+    "name": "_Raw",
+    "type": "STRING"
+  },
+  {
+    "mode": "NULLABLE",
     "name": "_ActorDid",
     "type": "STRING"
   },

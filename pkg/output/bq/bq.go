@@ -2,6 +2,7 @@ package bq
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -19,7 +20,7 @@ type BQ struct {
 	OutputChannel chan map[string]interface{}
 }
 
-func New(ctx context.Context, tablePath string) (*BQ, error) {
+func New(ctx context.Context, tablePath string, outputChannel chan map[string]interface{}) (*BQ, error) {
 	tablePathComponents := strings.Split(tablePath, ".")
 
 	// The second to last component is the dataset ID, and the last component is the table ID
@@ -42,9 +43,10 @@ func New(ctx context.Context, tablePath string) (*BQ, error) {
 	table := client.Dataset(datasetName).Table(tableName)
 
 	bq := BQ{
-		Context:     ctx,
-		Client:      client,
-		OutputTable: table,
+		Context:       ctx,
+		Client:        client,
+		OutputTable:   table,
+		OutputChannel: outputChannel,
 	}
 
 	return &bq, nil
@@ -81,18 +83,18 @@ func (bq BQ) Setup() error {
 			log.Errorf("Found schema mismatch between existing table and output data")
 			foundSchema, err1 := metadata.Schema.ToJSONFields()
 			if err1 != nil {
-				log.Errorf("Failed to convert existing schema to JSON: %+v", err1)
+				log.Errorf("Failed to convert existing schema to JSON: %s", err1)
 				return err1
 			}
 
 			desiredSchema, err2 := schema.ToJSONFields()
 			if err2 != nil {
-				log.Errorf("Failed to convert desired schema to JSON: %+v", err2)
+				log.Errorf("Failed to convert desired schema to JSON: %s", err2)
 				return err2
 			}
 
-			log.Errorf("Found schema: %+v", foundSchema)
-			log.Errorf("Desired schema: %+v", desiredSchema)
+			log.Errorf("Found schema: %s", foundSchema)
+			log.Errorf("Desired schema: %s", desiredSchema)
 			return errors.New("the schema of the existing table does not match the schema of the output data; please update the table schema manually")
 		} else {
 			log.Infof("Schema of table is compatible with output data!")
@@ -143,20 +145,39 @@ func (bq BQ) GetBackfillSeqno() (int64, error) {
 }
 
 func cleanOutput(value map[string]interface{}) map[string]interface{} {
-	// Recursively replace all fields whose keys start with "$" with "_"
 	for k, v := range value {
+		// Check if the key starts with "$" and replace it with "_"
 		if strings.HasPrefix(k, "$") {
-			value["_"+k[1:]] = v
+			newKey := "_" + k[1:]
+			value[newKey] = v
 			delete(value, k)
 		}
-		if vMap, ok := v.(map[string]interface{}); ok {
-			value[k] = cleanOutput(vMap)
+
+		// If the value is a map, recursively clean it
+		if subMap, ok := v.(map[string]interface{}); ok {
+			value[k] = cleanOutput(subMap)
 		}
 	}
 	return value
 }
 
+type MapValueSaver struct {
+	Data map[string]interface{}
+}
+
+func (mvs MapValueSaver) Save() (row map[string]bigquery.Value, insertID string, err error) {
+	row = make(map[string]bigquery.Value)
+	for k, v := range mvs.Data {
+		row[k] = v
+	}
+	// Generate a unique insertID if needed, or return "" if not
+	insertID = ""
+	return row, insertID, nil
+}
+
 func (bq BQ) StreamOutput(ctx context.Context) error {
+	log.Infof("Streaming output to BigQuery table: %+v", bq.OutputTable.FullyQualifiedName())
+
 	_, cancel := context.WithCancel(ctx)
 	inserter := bq.OutputTable.Inserter()
 	inserter.IgnoreUnknownValues = true
@@ -164,11 +185,20 @@ func (bq BQ) StreamOutput(ctx context.Context) error {
 	for {
 		e := <-bq.OutputChannel
 		cleaned := cleanOutput(e)
-		if err := inserter.Put(ctx, cleaned); err != nil {
+
+		// Insert the "_Raw" field as a string
+		json, err := json.Marshal(cleaned)
+		if err != nil {
+			log.Errorf("Failed to marshal event: %+v", err)
+			cancel()
+		}
+
+		cleaned["_Raw"] = string(json)
+
+		mvs := MapValueSaver{Data: cleaned}
+		if err := inserter.Put(ctx, mvs); err != nil {
 			log.Errorf("Failed to write output: %+v", err)
 			cancel()
-		} else {
-			log.Infof("Wrote output: %+v", cleaned)
 		}
 	}
 }

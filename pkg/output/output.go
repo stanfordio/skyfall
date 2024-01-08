@@ -19,7 +19,7 @@ type Output interface {
 func NewOutput(cctx *cli.Context, outputChannel chan map[string]interface{}) (Output, error) {
 	if cctx.String("output-bq-table") != "" {
 		log.Infof("output-bq-table specified, so writing output to BigQuery table: %s", cctx.String("output-bq-table"))
-		bq, err := bq.New(cctx.Context, cctx.String("output-bq-table"))
+		bq, err := bq.New(cctx.Context, cctx.String("output-bq-table"), outputChannel)
 		if err != nil {
 			log.Fatalf("Failed to create BigQuery output: %+v", err)
 			return nil, err
