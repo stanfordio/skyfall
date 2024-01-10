@@ -118,7 +118,7 @@ func (bq BQ) Setup() error {
 }
 
 func (bq BQ) GetBackfillSeqno() (int64, error) {
-	query := fmt.Sprintf("SELECT MAX(_Seq) as max_seq FROM `%s.%s.%s`", bq.OutputTable.ProjectID, bq.OutputTable.DatasetID, bq.OutputTable.TableID)
+	query := fmt.Sprintf("SELECT MAX(Seq) as max_seq FROM `%s.%s.%s`", bq.OutputTable.ProjectID, bq.OutputTable.DatasetID, bq.OutputTable.TableID)
 	log.Infof("Running query: %s", query)
 	result := bq.Client.Query(query)
 	it, err := result.Read(context.Background())
@@ -184,6 +184,15 @@ func (bq BQ) StreamOutput(ctx context.Context) error {
 
 	for {
 		e := <-bq.OutputChannel
+
+		// Set "Full" to the JSON representation of "Full"
+		fullMarshalled, err := json.Marshal(e["Full"])
+		if err != nil {
+			log.Errorf("Failed to marshal event: %+v", err)
+			cancel()
+		}
+		e["Full"] = string(fullMarshalled)
+
 		cleaned := cleanOutput(e)
 
 		// Insert the "_Raw" field as a string

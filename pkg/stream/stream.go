@@ -139,12 +139,15 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 
 		case repomgr.EvtKindDeleteRecord:
 			// Not much we can do here, since we don't have the record anymore; just log the action
-			hydrated, err := s.Hydrator.Hydrate(map[string]interface{}{"_Action": op.Action, "_Item": op.Path, "_Type": strings.Split(op.Path, "/")[0]}, actorDid)
+			hydrated, err := s.Hydrator.Hydrate(map[string]interface{}{"CreatedAt": time.Now().Format(time.RFC3339), "Item": op.Path, "LexiconTypeID": strings.Split(op.Path, "/")[0]}, actorDid)
 			if err != nil {
 				log_wf.Errorf("Failed to hydrate record: %+v", err)
 				error = err
 				break
 			}
+
+			hydrated["Action"] = op.Action
+			hydrated["Seq"] = evt.Seq
 
 			s.Output <- hydrated
 		default:

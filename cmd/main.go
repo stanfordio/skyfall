@@ -57,6 +57,11 @@ func run(args []string) {
 						Usage: "seq to backfill from (if specified, will override the seqno extracted from the output file/bigquery table)",
 						Value: 0,
 					},
+					&cli.BoolFlag{
+						Name:  "autorestart",
+						Usage: "automatically restart the stream if it dies",
+						Value: true,
+					},
 				},
 			},
 		},
@@ -167,12 +172,25 @@ func streamCmd(cctx *cli.Context) error {
 	}
 
 	go func() {
-		err = s.BeginStreaming(ctx, cctx.Int("worker-count"))
-		log.Fatalf("Streaming ended unexpectedly: %+v", err)
+		for {
+			err = s.BeginStreaming(ctx, cctx.Int("worker-count"))
+			log.Fatalf("Streaming ended unexpectedly: %+v", err)
+
+			if !cctx.Bool("autorestart") {
+				log.Infof("Exiting...")
+				break
+			} else {
+				log.Infof("Restarting stream...")
+			}
+		}
 		cancel()
 	}()
 
 	go output.StreamOutput(ctx)
+
+	if cctx.Bool("autorestart") {
+		log.Infof("Autorestart is enabled! Stream will restart if it dies...")
+	}
 
 	select {
 	case <-signals:

@@ -30,7 +30,7 @@ func (outfile Outfile) GetBackfillSeqno() (int64, error) {
 	if err != nil {
 		return 0, errors.New("unable to parse last line as JSON")
 	}
-	lastSeqFloat := lastData["_Seq"]
+	lastSeqFloat := lastData["Seq"]
 	if lastSeqFloat == nil {
 		return 0, errors.New("unable to find seq in last line of output file")
 	} else {
@@ -58,13 +58,16 @@ func (outfile Outfile) StreamOutput(ctx context.Context) error {
 
 	for {
 		e := <-outfile.OutputChannel
-		// Set "full" to the JSON representation of "full"
-		fullMarshalled, err := json.Marshal(e["Full"])
-		if err != nil {
-			log.Errorf("Failed to marshal event: %+v", err)
-			cancel()
+
+		if outfile.StringifyFull {
+			// Set "full" to the JSON representation of "full"
+			fullMarshalled, err := json.Marshal(e["Full"])
+			if err != nil {
+				log.Errorf("Failed to marshal event: %+v", err)
+				cancel()
+			}
+			e["Full"] = string(fullMarshalled)
 		}
-		e["Full"] = string(fullMarshalled)
 
 		// JSON encode the event
 		marshaled, err := json.Marshal(e)

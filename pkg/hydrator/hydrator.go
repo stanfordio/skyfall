@@ -171,7 +171,6 @@ func (h *Hydrator) flattenActorProfile(profile *bsky.ActorProfile) (result map[s
 
 	result = make(map[string]interface{})
 
-	result["Avatar"] = profile.Avatar
 	result["DisplayName"] = profile.DisplayName
 	result["Description"] = profile.Description
 
@@ -218,7 +217,11 @@ func (h *Hydrator) flattenPostView(post *bsky.FeedDefs_PostView) (result map[str
 	rec := post.Record.Val.(*bsky.FeedPost)
 	result["Text"] = rec.Text
 	result["CreatedAt"] = rec.CreatedAt
+
 	result["Langs"] = rec.Langs
+	if rec.Langs == nil {
+		result["Langs"] = []string{}
+	}
 
 	if rec.Embed != nil {
 		result["Embed"] = h.flattenEmbed(rec.Embed)
@@ -236,7 +239,12 @@ func (h *Hydrator) flattenPost(post *bsky.FeedPost) (result map[string]interface
 
 	result["Text"] = post.Text
 	result["CreatedAt"] = post.CreatedAt
+
 	result["Langs"] = post.Langs
+	if post.Langs == nil {
+		result["Langs"] = []string{}
+	}
+
 	if post.Reply != nil {
 		result["ReplyParentCID"] = post.Reply.Parent.Cid
 	}
