@@ -130,10 +130,10 @@ func (s *Stream) HandleRepoCommit(ctx context.Context, evt *comatproto.SyncSubsc
 			}
 
 			// Log the action performed
-			hydrated["_Action"] = op.Action
+			hydrated["Action"] = op.Action
 
 			// Include the event sequence number
-			hydrated["_Seq"] = evt.Seq
+			hydrated["Seq"] = evt.Seq
 
 			s.Output <- hydrated
 

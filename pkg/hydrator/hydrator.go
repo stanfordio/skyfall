@@ -134,10 +134,203 @@ func (h *Hydrator) lookupPost(atUrl string) (post *bsky.FeedDefs_PostView, err e
 	return
 }
 
+func (h *Hydrator) flattenIdentity(identity *atpidentity.Identity) (result map[string]interface{}) {
+	if identity == nil {
+		return nil
+	}
+
+	result = make(map[string]interface{})
+
+	result["DID"] = identity.Handle.String()
+	result["Handle"] = identity.Handle
+	result["DIDKey"] = identity.ParsedPublicKey.DIDKey()
+	result["PDS"] = identity.PDSEndpoint()
+
+	return
+}
+
+func (h *Hydrator) flattenProfile(profile *bsky.ActorDefs_ProfileViewBasic) (result map[string]interface{}) {
+	if profile == nil {
+		return nil
+	}
+
+	result = make(map[string]interface{})
+
+	result["Avatar"] = profile.Avatar
+	result["DisplayName"] = profile.DisplayName
+	result["Handle"] = profile.Handle
+	result["DID"] = profile.Did
+
+	return
+}
+
+func (h *Hydrator) flattenActorProfile(profile *bsky.ActorProfile) (result map[string]interface{}) {
+	if profile == nil {
+		return nil
+	}
+
+	result = make(map[string]interface{})
+
+	result["Avatar"] = profile.Avatar
+	result["DisplayName"] = profile.DisplayName
+	result["Description"] = profile.Description
+
+	return
+}
+
+func (h *Hydrator) flattenFullProfile(profile *bsky.ActorDefs_ProfileViewDetailed) (result map[string]interface{}) {
+	if profile == nil {
+		return nil
+	}
+
+	result = make(map[string]interface{})
+
+	result["Avatar"] = profile.Avatar
+	result["DisplayName"] = profile.DisplayName
+	result["Handle"] = profile.Handle
+	result["DID"] = profile.Did
+	result["Description"] = profile.Description
+	result["FollowersCount"] = profile.FollowersCount
+	result["FollowsCount"] = profile.FollowsCount
+	result["PostsCount"] = profile.PostsCount
+
+	return
+}
+
+func (h *Hydrator) flattenPostView(post *bsky.FeedDefs_PostView) (result map[string]interface{}) {
+	if post == nil {
+		return nil
+	}
+
+	result = make(map[string]interface{})
+
+	if post.Author == nil {
+		result["Author"] = nil
+	} else {
+		result["Author"] = h.flattenProfile(post.Author)
+	}
+	result["CID"] = post.Cid
+	result["LikeCount"] = post.LikeCount
+	result["RepostCount"] = post.RepostCount
+	result["LikeCount"] = post.LikeCount
+	result["URI"] = post.Uri
+
+	rec := post.Record.Val.(*bsky.FeedPost)
+	result["Text"] = rec.Text
+	result["CreatedAt"] = rec.CreatedAt
+	result["Langs"] = rec.Langs
+
+	if rec.Embed != nil {
+		result["Embed"] = h.flattenEmbed(rec.Embed)
+	}
+
+	return
+}
+
+func (h *Hydrator) flattenPost(post *bsky.FeedPost) (result map[string]interface{}) {
+	if post == nil {
+		return nil
+	}
+
+	result = make(map[string]interface{})
+
+	result["Text"] = post.Text
+	result["CreatedAt"] = post.CreatedAt
+	result["Langs"] = post.Langs
+	if post.Reply != nil {
+		result["ReplyParentCID"] = post.Reply.Parent.Cid
+	}
+
+	if post.Embed != nil {
+		result["Embed"] = h.flattenEmbed(post.Embed)
+	}
+
+	return
+}
+
+func (h *Hydrator) flattenEmbed(embed *bsky.FeedPost_Embed) (result map[string]interface{}) {
+	if embed == nil {
+		return nil
+	}
+
+	result = make(map[string]interface{})
+
+	// Three types of embeds: external links, images, records, and records with media
+	if embed.EmbedExternal != nil && embed.EmbedExternal.External != nil {
+		externalEmbedResult := make(map[string]interface{})
+		externalEmbedResult["URI"] = embed.EmbedExternal.External.Uri
+		externalEmbedResult["Title"] = embed.EmbedExternal.External.Title
+		externalEmbedResult["Description"] = embed.EmbedExternal.External.Description
+		result["External"] = externalEmbedResult
+	} else {
+		result["External"] = nil
+	}
+
+	if embed.EmbedImages != nil && len(embed.EmbedImages.Images) > 0 {
+		images := make([]map[string]interface{}, 0)
+		for _, image := range embed.EmbedImages.Images {
+			imageResult := make(map[string]interface{})
+			imageResult["Alt"] = image.Alt
+			imageResult["BlobLink"] = image.Image.Ref.String()
+			imageResult["MimeType"] = image.Image.MimeType
+			if image.AspectRatio != nil {
+				imageResult["Width"] = image.AspectRatio.Width
+				imageResult["Height"] = image.AspectRatio.Height
+			}
+			imageResult["MimeType"] = image.Image.MimeType
+			images = append(images, imageResult)
+		}
+		result["Images"] = images
+	} else {
+		result["Images"] = []map[string]interface{}{}
+	}
+
+	if embed.EmbedRecord != nil && embed.EmbedRecord.Record != nil {
+		recordEmbedResult := make(map[string]interface{})
+		recordEmbedResult["CID"] = embed.EmbedRecord.Record.Cid
+		recordEmbedResult["URI"] = embed.EmbedRecord.Record.Uri
+		recordEmbedResult["Type"] = embed.EmbedRecord.LexiconTypeID
+		result["Record"] = recordEmbedResult
+	}
+
+	if embed.EmbedRecordWithMedia != nil && embed.EmbedRecordWithMedia.Record != nil {
+		recordEmbedResult := make(map[string]interface{})
+		recordEmbedResult["CID"] = embed.EmbedRecordWithMedia.Record.Record.Cid
+		recordEmbedResult["URI"] = embed.EmbedRecordWithMedia.Record.Record.Uri
+		recordEmbedResult["Type"] = embed.EmbedRecordWithMedia.LexiconTypeID
+
+		media := make([]map[string]interface{}, 0)
+		if embed.EmbedRecordWithMedia.Media.EmbedImages != nil {
+			for _, image := range embed.EmbedRecordWithMedia.Media.EmbedImages.Images {
+				mediaResult := make(map[string]interface{})
+				mediaResult["Alt"] = image.Alt
+				mediaResult["BlobLink"] = image.Image.Ref.String()
+				mediaResult["MimeType"] = image.Image.MimeType
+
+				if image.AspectRatio != nil {
+					mediaResult["Width"] = image.AspectRatio.Width
+					mediaResult["Height"] = image.AspectRatio.Height
+				}
+
+				mediaResult["MimeType"] = image.Image.MimeType
+				media = append(media, mediaResult)
+			}
+		}
+		result["EmbedRecordMedia"] = media
+
+		result["Record"] = recordEmbedResult
+	}
+
+	return
+}
+
 func (h *Hydrator) Hydrate(val interface{}, actorDid string) (result map[string]interface{}, err error) {
 	err = nil
 
-	err = mapstructure.Decode(val, &result)
+	result = make(map[string]interface{})
+	full := make(map[string]interface{})
+	projection := make(map[string]interface{})
+	err = mapstructure.Decode(val, &full)
 
 	if err != nil {
 		return
@@ -156,13 +349,16 @@ func (h *Hydrator) Hydrate(val interface{}, actorDid string) (result map[string]
 		profile = nil
 	}
 
-	// Add the actorDid and profile to the map
-	result["_ActorDid"] = actorDid
-	result["_ActorIdentity"] = identity
-	result["_ActorProfile"] = profile
+	// Add key metadata to the outer map
+	result["Type"] = full["LexiconTypeID"]
+	result["CreatedAt"] = full["CreatedAt"]
+	result["PulledTimestamp"] = time.Now().Format(time.RFC3339)
 
-	// Add the pulled time to the map, iso8601
-	result["_PulledTimestamp"] = time.Now().Format(time.RFC3339)
+	// Add the actorDid and profile to the map
+	full["_ActorDid"] = actorDid
+	full["_ActorIdentity"] = identity
+	full["_ActorProfile"] = profile
+	projection["Actor"] = h.flattenIdentity(identity)
 
 	// Depending on the type, add additional information
 	switch val := val.(type) {
@@ -174,7 +370,8 @@ func (h *Hydrator) Hydrate(val interface{}, actorDid string) (result map[string]
 			log.Warnf("Failed to get post for like: %s", val.Subject.Uri)
 			post = nil
 		}
-		result["_LikedPost"] = post
+		full["_LikedPost"] = post
+		projection["LikedPost"] = h.flattenPostView(post)
 	case *bsky.FeedRepost:
 		// Lookup the actual post (basic author info will be included)
 		post, err := h.lookupPost(val.Subject.Uri)
@@ -182,7 +379,8 @@ func (h *Hydrator) Hydrate(val interface{}, actorDid string) (result map[string]
 			log.Warnf("Failed to get post for repost: %s", val.Subject.Uri)
 			post = nil
 		}
-		result["_RepostedPost"] = post
+		full["_RepostedPost"] = post
+		projection["RepostedPost"] = h.flattenPostView(post)
 	case *bsky.GraphBlock:
 		// Lookup the blocked user
 		profile, err := h.lookupProfile(val.Subject)
@@ -190,7 +388,8 @@ func (h *Hydrator) Hydrate(val interface{}, actorDid string) (result map[string]
 			log.Warnf("Failed to get profile for blocked user: %s", val.Subject)
 			profile = nil
 		}
-		result["_BlockedProfile"] = profile
+		full["_BlockedProfile"] = profile
+		projection["BlockedProfile"] = h.flattenFullProfile(profile)
 	case *bsky.GraphFollow:
 		// Lookup the followed user
 		profile, err := h.lookupProfile(val.Subject)
@@ -198,12 +397,17 @@ func (h *Hydrator) Hydrate(val interface{}, actorDid string) (result map[string]
 			log.Warnf("Failed to get profile for followed user: %s", val.Subject)
 			profile = nil
 		}
-		result["_FollowedProfile"] = profile
+		full["_FollowedProfile"] = profile
+		projection["FollowedProfile"] = h.flattenFullProfile(profile)
 	case *bsky.ActorProfile:
-		// Nothing to do
+		projection["Profile"] = h.flattenActorProfile(val)
 	case *bsky.FeedPost:
-		// Nothing to do
+		projection["Post"] = h.flattenPost(val)
 	}
+
+	// Add the full object to the result
+	result["Full"] = full
+	result["Projection"] = projection
 
 	return
 }

@@ -13,6 +13,7 @@ import (
 type Outfile struct {
 	// OutputFile is the path to the file to write output to
 	OutputFilePath string
+	StringifyFull  bool
 	OutputChannel  chan map[string]interface{}
 }
 
@@ -57,6 +58,14 @@ func (outfile Outfile) StreamOutput(ctx context.Context) error {
 
 	for {
 		e := <-outfile.OutputChannel
+		// Set "full" to the JSON representation of "full"
+		fullMarshalled, err := json.Marshal(e["Full"])
+		if err != nil {
+			log.Errorf("Failed to marshal event: %+v", err)
+			cancel()
+		}
+		e["Full"] = string(fullMarshalled)
+
 		// JSON encode the event
 		marshaled, err := json.Marshal(e)
 		if err != nil {

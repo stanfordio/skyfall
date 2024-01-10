@@ -43,6 +43,11 @@ func run(args []string) {
 						Usage: "file to write output to (if specified, will attempt to backfill from the most recent event in the file)",
 						Value: "output.jsonl",
 					},
+					&cli.BoolFlag{
+						Name:  "stringify-full",
+						Usage: "whether to stringify the full event in file output (if true, the JSON will be stringified; this is helpful when you want output to match what would be sent to BigQuery)",
+						Value: false,
+					},
 					&cli.StringFlag{
 						Name:  "output-bq-table",
 						Usage: "name of a BigQuery table to output to in ID form (e.g., dgap_bsky.example_table)",

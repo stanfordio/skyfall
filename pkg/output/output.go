@@ -32,6 +32,7 @@ func NewOutput(cctx *cli.Context, outputChannel chan map[string]interface{}) (Ou
 		return outfile.Outfile{
 			OutputFilePath: cctx.String("output-file"),
 			OutputChannel:  outputChannel,
+			StringifyFull:  cctx.Bool("stringify-full"),
 		}, nil
 	}
 
