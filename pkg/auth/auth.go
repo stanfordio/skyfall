@@ -104,7 +104,7 @@ func (a *Authenticator) refreshTokenContinuously(authOutput *atproto.ServerCreat
 		if error != nil {
 			log.Errorf("Error refreshing token: %+v", error)
 		} else {
-			log.Infof("Successfully refreshed access token")
+			log.Debugf("Successfully refreshed access token")
 		}
 
 		time.Sleep(15 * time.Second)
