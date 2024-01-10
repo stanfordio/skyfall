@@ -174,7 +174,7 @@ func streamCmd(cctx *cli.Context) error {
 	go func() {
 		for {
 			err = s.BeginStreaming(ctx, cctx.Int("worker-count"))
-			log.Fatalf("Streaming ended unexpectedly: %+v", err)
+			log.Errorf("Streaming ended unexpectedly: %+v", err)
 
 			if !cctx.Bool("autorestart") {
 				log.Infof("Exiting...")
