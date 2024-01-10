@@ -107,6 +107,6 @@ func (a *Authenticator) refreshTokenContinuously(authOutput *atproto.ServerCreat
 			log.Infof("Successfully refreshed access token")
 		}
 
-		time.Sleep(time.Minute)
+		time.Sleep(15 * time.Second)
 	}
 }
