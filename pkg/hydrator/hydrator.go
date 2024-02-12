@@ -1,16 +1,19 @@
 package hydrator
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	atpidentity "github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
+	"github.com/bluesky-social/indigo/repo"
 	indigoutil "github.com/bluesky-social/indigo/util"
 	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/dgraph-io/ristretto"
@@ -41,7 +44,7 @@ func MakeHydrator(ctx context.Context, cacheSize int64, authInfo *xrpc.AuthInfo)
 		Context: ctx,
 		Client: &xrpc.Client{
 			Client: indigoutil.RobustHTTPClient(),
-			Host:   "https://bsky.social", // We generally want to use the bsky.social host for all requests, since they are doing the indexing
+			Host:   "https://public.api.bsky.app", // We generally want to use the public.api.bsky.app host for all requests, since they are doing the indexing (and it's public with big rate limits)
 			Auth:   authInfo,
 		},
 		IdentityDirectory: atpidentity.DefaultDirectory(),
@@ -254,6 +257,45 @@ func (h *Hydrator) flattenPost(post *bsky.FeedPost) (result map[string]interface
 	}
 
 	return
+}
+
+func (h *Hydrator) getRepo(actorDid string) (*repo.Repo, error) {
+	// Check the cache first
+	cachedValue, found := h.Cache.Get(actorDid)
+
+	if found && cachedValue != nil {
+		repo := cachedValue.(*repo.Repo)
+		return repo, nil
+	}
+
+	identity, err := h.lookupIdentity(actorDid)
+
+	if err != nil {
+		return nil, err
+	}
+
+	xrpcc := xrpc.Client{
+		Host: identity.PDSEndpoint(),
+	}
+
+	repoBytes, err := atproto.SyncGetRepo(h.Context, &xrpcc, identity.DID.String(), "")
+	if err != nil {
+		return nil, err
+	}
+
+	repo, err := repo.ReadRepoFromCar(h.Context, bytes.NewReader(repoBytes))
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the cache
+	h.Cache.SetWithTTL(actorDid, repo, 1, time.Duration(1)*time.Hour*24)
+
+	return repo, nil
+}
+
+func (h *Hydrator) invalidateRepoCache(actorDid string) {
+	h.Cache.Del(actorDid)
 }
 
 func (h *Hydrator) flattenEmbed(embed *bsky.FeedPost_Embed) (result map[string]interface{}) {
