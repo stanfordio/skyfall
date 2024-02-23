@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"os"
 	"os/signal"
@@ -11,6 +12,7 @@ import (
 	"github.com/stanfordio/skyfall/pkg/auth"
 	"github.com/stanfordio/skyfall/pkg/hydrator"
 	"github.com/stanfordio/skyfall/pkg/output"
+	repodump "github.com/stanfordio/skyfall/pkg/repodump"
 	stream "github.com/stanfordio/skyfall/pkg/stream"
 	"github.com/urfave/cli/v2"
 
@@ -61,6 +63,19 @@ func run(args []string) {
 						Name:  "autorestart",
 						Usage: "automatically restart the stream if it dies",
 						Value: true,
+					},
+				},
+			},
+			{
+				Name:    "repodump",
+				Aliases: []string{"d"},
+				Usage:   "Dump everyone's repos (as CAR) into a folder",
+				Action:  repodumpCmd,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "output-folder",
+						Usage: "folder to write repos to",
+						Value: "output",
 					},
 				},
 			},
@@ -191,6 +206,80 @@ func streamCmd(cctx *cli.Context) error {
 	if cctx.Bool("autorestart") {
 		log.Infof("Autorestart is enabled! Stream will restart if it dies...")
 	}
+
+	select {
+	case <-signals:
+		cancel()
+		log.Infof("Shutting down on signal")
+	case <-ctx.Done():
+		log.Infof("Shutting down on context done")
+	}
+
+	return nil
+}
+
+func repodumpCmd(cctx *cli.Context) error {
+	ctx := cctx.Context
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Trap SIGINT to trigger a shutdown.
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+
+	// Authenticate
+	authInfo, err := authenticate(cctx)
+	if err != nil {
+		log.Fatalf("Failed to authenticate: %+v", err)
+		return err
+	}
+
+	hydrator, err := hydrator.MakeHydrator(cctx.Context, cctx.Int64("cache-size"), authInfo)
+	if err != nil {
+		log.Fatalf("Failed to create hydrator: %+v", err)
+		return err
+	}
+
+	// Create a client
+	client := &repodump.RepoDump{
+		PdsQueue:     make(map[string]bool),
+		PdsCompleted: make(map[string]bool),
+		Hydrator:     hydrator,
+		Output:       make(chan repodump.CarOutput),
+	}
+
+	// Start downloading repos
+	go func() {
+		err := client.BeginDownloading(ctx)
+		log.Errorf("Downloading ended unexpectedly: %+v", err)
+		cancel()
+	}()
+
+	// Start writing repos to the output folder
+	go func() {
+		for carOutput := range client.Output {
+			// The folder is the output folder, followed by the first two
+			// characters of the DID, followed by the second two characters of
+			// the DID e.g., output/ab/12/did:plc:ab1234.car. This is to prevent too
+			// many files in a single directory. Note that we have to skip the `did:plc:`
+			// prefix.
+			folder := fmt.Sprintf("%s/%s/%s", cctx.String("output-folder"), carOutput.Did[8:10], carOutput.Did[10:12])
+			locationOnDisk := fmt.Sprintf("%s/%s.car", folder, carOutput.Did)
+
+			// Ensure necessary directories exist
+			err := os.MkdirAll(folder, 0755)
+			if err != nil {
+				log.Errorf("Failed to create output folder: %+v", err)
+				continue
+			}
+
+			// Write the car to disk
+			err = os.WriteFile(locationOnDisk, carOutput.Data, 0644)
+			if err != nil {
+				log.Errorf("Failed to write car to output folder: %+v", err)
+			}
+		}
+	}()
 
 	select {
 	case <-signals:

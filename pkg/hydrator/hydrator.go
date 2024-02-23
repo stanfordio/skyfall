@@ -7,6 +7,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"go.uber.org/ratelimit"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
@@ -26,6 +27,7 @@ type Hydrator struct {
 	Context           context.Context
 	Client            *xrpc.Client
 	IdentityDirectory identity.Directory
+	Ratelimit         ratelimit.Limiter // Rate limiting for authenticated endpoints. May be called by other packages whenever they make a rate-limited request.
 }
 
 func MakeHydrator(ctx context.Context, cacheSize int64, authInfo *xrpc.AuthInfo) (*Hydrator, error) {
@@ -49,12 +51,13 @@ func MakeHydrator(ctx context.Context, cacheSize int64, authInfo *xrpc.AuthInfo)
 		},
 		IdentityDirectory: atpidentity.DefaultDirectory(),
 		AuthInfo:          authInfo,
+		Ratelimit:         ratelimit.New(10), // 10 requests per second, or 3000 per 5 minutes
 	}
 
 	return &h, nil
 }
 
-func (h *Hydrator) lookupIdentity(identifier string) (identity *atpidentity.Identity, err error) {
+func (h *Hydrator) LookupIdentity(identifier string) (identity *atpidentity.Identity, err error) {
 	// Check the cache first
 	cachedValue, found := h.Cache.Get(identifier)
 
@@ -101,7 +104,7 @@ func (h *Hydrator) lookupProfileFromIdentity(identity *atpidentity.Identity) (pr
 }
 
 func (h *Hydrator) lookupProfile(did string) (profile *bsky.ActorDefs_ProfileViewDetailed, err error) {
-	identity, err := h.lookupIdentity(did)
+	identity, err := h.LookupIdentity(did)
 	if err != nil {
 		return
 	}
@@ -268,7 +271,7 @@ func (h *Hydrator) getRepo(actorDid string) (*repo.Repo, error) {
 		return repo, nil
 	}
 
-	identity, err := h.lookupIdentity(actorDid)
+	identity, err := h.LookupIdentity(actorDid)
 
 	if err != nil {
 		return nil, err
@@ -278,6 +281,7 @@ func (h *Hydrator) getRepo(actorDid string) (*repo.Repo, error) {
 		Host: identity.PDSEndpoint(),
 	}
 
+	h.Ratelimit.Take()
 	repoBytes, err := atproto.SyncGetRepo(h.Context, &xrpcc, identity.DID.String(), "")
 	if err != nil {
 		return nil, err
@@ -387,7 +391,7 @@ func (h *Hydrator) Hydrate(val interface{}, actorDid string) (result map[string]
 	}
 
 	// Resolve full identity and profile information for the actor
-	identity, err := h.lookupIdentity(actorDid)
+	identity, err := h.LookupIdentity(actorDid)
 	if err != nil {
 		log.Warnf("Failed to get profile for actor: %s", actorDid)
 		identity = nil
