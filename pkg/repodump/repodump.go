@@ -3,11 +3,12 @@ package stream
 // Borrowed in part from https://github.com/bluesky-social/indigo/blob/main/sonar/sonar.go
 
 import (
+	"bytes"
 	"context"
 	"sync"
 
-	"github.com/bluesky-social/indigo/api/atproto"
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/repo"
 	indigoutil "github.com/bluesky-social/indigo/util"
 	"github.com/bluesky-social/indigo/xrpc"
 	log "github.com/sirupsen/logrus"
@@ -23,6 +24,7 @@ type CarOutput struct {
 type RepoDump struct {
 	PdsQueue     map[string]bool // Using a map as a set
 	PdsCompleted map[string]bool // Using a map as a set
+	SkipDids     func(string) bool
 	Hydrator     *hydrator.Hydrator
 	Output       chan CarOutput
 }
@@ -36,22 +38,44 @@ func (s *RepoDump) startRepoDownloader(ctx context.Context, carChan chan *carPul
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
-			xrpcClient := xrpc.Client{
-				Client: indigoutil.RobustHTTPClient(),
-				Host:   "", // Will be set by the loop below
-			}
-
 			for downloadRequest := range carChan {
 				// Download the car
-				log.Debugf("Downloading car: %s from %s", downloadRequest.did, downloadRequest.pdsEndpoint)
+				if s.SkipDids(downloadRequest.did) {
+					log.Infof("Skipping car: %s from %s (likely already downloaded)", downloadRequest.did, downloadRequest.pdsEndpoint)
+					continue
+				}
+				log.Infof("Downloading car: %s from %s", downloadRequest.did, downloadRequest.pdsEndpoint)
 
 				// Pull the bytes
-				s.Hydrator.Ratelimit.Take()
-				xrpcClient.Host = downloadRequest.pdsEndpoint
-				repoBytes, err := atproto.SyncGetRepo(ctx, &xrpcClient, downloadRequest.did, "")
+				repoBytes, err := s.Hydrator.GetRepoBytes(downloadRequest.did, downloadRequest.pdsEndpoint)
 				if err != nil {
 					log.Errorf("Failed to download car %s from %s: %v", downloadRequest.did, downloadRequest.pdsEndpoint, err)
 					continue
+				}
+
+				// Parse the repo so that we can pull all the identities in the repo
+				repo, err := repo.ReadRepoFromCar(ctx, bytes.NewReader(repoBytes))
+				if err != nil {
+					log.Errorf("Unable to read repo %s: %s", downloadRequest.did, err)
+				}
+
+				// Pull all the identities
+				identities, err := s.Hydrator.GetIdentitiesInRepo(repo)
+				if err != nil {
+					log.Errorf("Unable to read identities in repo %s: %s", downloadRequest.did, err)
+				}
+
+				log.Infof("Found %d identities in repo %s", len(identities), downloadRequest.did)
+
+				// Find the unique PDSes
+				// TODO: Is there a race condition here?
+				for _, identity := range identities {
+					if _, ok := s.PdsCompleted[identity.PDSEndpoint()]; !ok {
+						if _, ok := s.PdsQueue[identity.PDSEndpoint()]; !ok {
+							log.Infof("Adding PDS to queue: %s", identity.PDSEndpoint())
+							s.PdsQueue[identity.PDSEndpoint()] = true
+						}
+					}
 				}
 
 				// Write the bytes to the output channel
@@ -91,6 +115,7 @@ func (s *RepoDump) BeginDownloading(ctx context.Context) error {
 			break
 		}
 		delete(s.PdsQueue, pdsEndpoint)
+		s.PdsCompleted[pdsEndpoint] = true
 
 		xrpcClient := &xrpc.Client{
 			Client: indigoutil.RobustHTTPClient(),
@@ -113,7 +138,7 @@ func (s *RepoDump) BeginDownloading(ctx context.Context) error {
 
 			// Go through and pull each repo
 			for _, r := range out.Repos {
-				log.Infof("Pulling DID from %s: %s", pdsEndpoint, r.Did)
+				log.Infof("Pulling CAR from %s: %s", pdsEndpoint, r.Did)
 				carDownloadChannel <- &carPullRequest{
 					pdsEndpoint: pdsEndpoint,
 					did:         r.Did,

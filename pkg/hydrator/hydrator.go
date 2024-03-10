@@ -1,11 +1,13 @@
 package hydrator
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"regexp"
 	"time"
 
+	"github.com/ipfs/go-cid"
 	log "github.com/sirupsen/logrus"
 	"go.uber.org/ratelimit"
 
@@ -29,6 +31,8 @@ type Hydrator struct {
 	IdentityDirectory identity.Directory
 	Ratelimit         ratelimit.Limiter // Rate limiting for authenticated endpoints. May be called by other packages whenever they make a rate-limited request.
 }
+
+var didRegex = regexp.MustCompile(`did:plc:[a-zA-Z0-9]+`)
 
 func MakeHydrator(ctx context.Context, cacheSize int64, authInfo *xrpc.AuthInfo) (*Hydrator, error) {
 	cache, err := ristretto.NewCache(&ristretto.Config{
@@ -57,9 +61,15 @@ func MakeHydrator(ctx context.Context, cacheSize int64, authInfo *xrpc.AuthInfo)
 	return &h, nil
 }
 
+func namespaceKey(namespace string, key string) string {
+	return fmt.Sprintf("%s:%s", namespace, key)
+}
+
 func (h *Hydrator) LookupIdentity(identifier string) (identity *atpidentity.Identity, err error) {
+	key := namespaceKey("identity", identifier)
+
 	// Check the cache first
-	cachedValue, found := h.Cache.Get(identifier)
+	cachedValue, found := h.Cache.Get(key)
 
 	if found && cachedValue != nil {
 		identity = cachedValue.(*atpidentity.Identity)
@@ -79,14 +89,16 @@ func (h *Hydrator) LookupIdentity(identifier string) (identity *atpidentity.Iden
 		return
 	}
 
-	h.Cache.SetWithTTL(identifier, identity, 1, time.Duration(1)*time.Hour*24)
+	h.Cache.SetWithTTL(key, identity, 1, time.Duration(1)*time.Hour*24)
 
 	return
 }
 
 func (h *Hydrator) lookupProfileFromIdentity(identity *atpidentity.Identity) (profile *bsky.ActorDefs_ProfileViewDetailed, err error) {
+	key := namespaceKey("profile", identity.Handle.String())
+
 	// Check the cache first
-	cachedValue, found := h.Cache.Get(identity.Handle.String())
+	cachedValue, found := h.Cache.Get(key)
 
 	if found && cachedValue != nil {
 		profile = cachedValue.(*bsky.ActorDefs_ProfileViewDetailed)
@@ -97,7 +109,7 @@ func (h *Hydrator) lookupProfileFromIdentity(identity *atpidentity.Identity) (pr
 
 	// Set the cache
 	if err != nil {
-		h.Cache.SetWithTTL(identity.Handle.String(), profile, 1, time.Duration(1)*time.Hour*24)
+		h.Cache.SetWithTTL(key, profile, 1, time.Duration(1)*time.Hour*24)
 	}
 
 	return
@@ -113,8 +125,10 @@ func (h *Hydrator) lookupProfile(did string) (profile *bsky.ActorDefs_ProfileVie
 }
 
 func (h *Hydrator) lookupPost(atUrl string) (post *bsky.FeedDefs_PostView, err error) {
+	key := namespaceKey("post", atUrl)
+
 	// Check the cache first
-	cachedValue, found := h.Cache.Get(atUrl)
+	cachedValue, found := h.Cache.Get(key)
 
 	if found && cachedValue != nil {
 		post = cachedValue.(*bsky.FeedDefs_PostView)
@@ -135,7 +149,7 @@ func (h *Hydrator) lookupPost(atUrl string) (post *bsky.FeedDefs_PostView, err e
 
 	post = output.Posts[0]
 
-	h.Cache.SetWithTTL(atUrl, post, 1, time.Duration(1)*time.Hour*24)
+	h.Cache.SetWithTTL(key, post, 1, time.Duration(1)*time.Hour*24)
 
 	return
 }
@@ -262,40 +276,84 @@ func (h *Hydrator) flattenPost(post *bsky.FeedPost) (result map[string]interface
 	return
 }
 
-func (h *Hydrator) getRepo(actorDid string) (*repo.Repo, error) {
+func (h *Hydrator) extractAllDids(str string) []string {
+	// Nasty hack that runs a Regex over the string to extract all the DIDs. We
+	// do this so we can reliably extract all DIDs from records without having
+	// to worry about Bluesky changing their schema.
+
+	// Find all matches of the regular expression in the string
+	matches := didRegex.FindAllString(str, -1)
+
+	// Return the slice of extracted DIDs
+	return matches
+}
+
+func (h *Hydrator) GetIdentitiesInRepo(repo *repo.Repo) ([]atpidentity.Identity, error) {
+	identities := make([]atpidentity.Identity, 0)
+	identitiesFound := make(map[string]bool)
+
+	err := repo.ForEach(h.Context, "", func(k string, v cid.Cid) error {
+		// Get the record
+		_, rec, err := repo.GetRecord(h.Context, k)
+		if err != nil {
+			log.Errorf("Unable to parse CID %s: %s", v.String(), err)
+			return err
+		}
+
+		recJson, err := json.MarshalIndent(rec, "", "  ")
+		if err != nil {
+			return err
+		}
+		dids := h.extractAllDids(string(recJson))
+
+		// Lookup all the identities
+		for i := range dids {
+			did := dids[i]
+			if identitiesFound[did] {
+				continue
+			}
+			identitiesFound[did] = true
+			identity, err := h.LookupIdentity(did)
+			if err != nil {
+				log.Errorf("Failed to lookup identity for %s: %s", did, err)
+				continue
+			}
+			identities = append(identities, *identity)
+		}
+
+		return nil
+	})
+
+	return identities, err
+}
+
+func (h *Hydrator) GetRepoBytes(actorDid string, pdsEndpoint string) ([]byte, error) {
+	key := namespaceKey("repo", actorDid)
+
 	// Check the cache first
-	cachedValue, found := h.Cache.Get(actorDid)
+	cachedValue, found := h.Cache.Get(key)
 
 	if found && cachedValue != nil {
-		repo := cachedValue.(*repo.Repo)
+		repo := cachedValue.([]byte)
 		return repo, nil
 	}
 
-	identity, err := h.LookupIdentity(actorDid)
-
-	if err != nil {
-		return nil, err
-	}
-
+	h.Ratelimit.Take()
 	xrpcc := xrpc.Client{
-		Host: identity.PDSEndpoint(),
+		Host: pdsEndpoint,
 	}
 
 	h.Ratelimit.Take()
-	repoBytes, err := atproto.SyncGetRepo(h.Context, &xrpcc, identity.DID.String(), "")
-	if err != nil {
-		return nil, err
-	}
-
-	repo, err := repo.ReadRepoFromCar(h.Context, bytes.NewReader(repoBytes))
+	repoBytes, err := atproto.SyncGetRepo(h.Context, &xrpcc, actorDid, "")
 	if err != nil {
 		return nil, err
 	}
 
 	// Set the cache
-	h.Cache.SetWithTTL(actorDid, repo, 1, time.Duration(1)*time.Hour*24)
+	h.Cache.SetWithTTL(key, repoBytes, 1, time.Duration(1)*time.Hour*24)
 
-	return repo, nil
+	return repoBytes, nil
+
 }
 
 func (h *Hydrator) invalidateRepoCache(actorDid string) {

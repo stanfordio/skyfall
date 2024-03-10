@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -240,10 +241,27 @@ func repodumpCmd(cctx *cli.Context) error {
 		return err
 	}
 
+	// Create a function to help the repodump tool know which repos to skip
+	// (I.e., repos that are already on the disk.)
+	didDownloadPath := func(did string) (string, string) {
+		folder := fmt.Sprintf("%s/%s/%s", cctx.String("output-folder"), did[8:10], did[10:12])
+		locationOnDisk := fmt.Sprintf("%s/%s.car", folder, did)
+		return folder, locationOnDisk
+	}
+	shouldSkip := func(did string) bool {
+		_, loc := didDownloadPath(did)
+		// Check if the file exists
+		if _, err := os.Stat(loc); errors.Is(err, os.ErrNotExist) {
+			return false
+		}
+		return true
+	}
+
 	// Create a client
 	client := &repodump.RepoDump{
 		PdsQueue:     make(map[string]bool),
 		PdsCompleted: make(map[string]bool),
+		SkipDids:     shouldSkip,
 		Hydrator:     hydrator,
 		Output:       make(chan repodump.CarOutput),
 	}
@@ -263,8 +281,7 @@ func repodumpCmd(cctx *cli.Context) error {
 			// the DID e.g., output/ab/12/did:plc:ab1234.car. This is to prevent too
 			// many files in a single directory. Note that we have to skip the `did:plc:`
 			// prefix.
-			folder := fmt.Sprintf("%s/%s/%s", cctx.String("output-folder"), carOutput.Did[8:10], carOutput.Did[10:12])
-			locationOnDisk := fmt.Sprintf("%s/%s.car", folder, carOutput.Did)
+			folder, locationOnDisk := didDownloadPath(carOutput.Did)
 
 			// Ensure necessary directories exist
 			err := os.MkdirAll(folder, 0755)
