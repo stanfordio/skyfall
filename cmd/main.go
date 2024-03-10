@@ -1,15 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 
+	"github.com/bluesky-social/indigo/repo"
 	"github.com/bluesky-social/indigo/xrpc"
+	"github.com/ipfs/go-cid"
 	"github.com/stanfordio/skyfall/pkg/auth"
 	"github.com/stanfordio/skyfall/pkg/hydrator"
 	"github.com/stanfordio/skyfall/pkg/output"
@@ -32,7 +37,7 @@ func run(args []string) {
 		Commands: []*cli.Command{
 			{
 				Name:    "stream",
-				Aliases: []string{"t"},
+				Aliases: []string{"s"},
 				Usage:   "Sip from the firehose",
 				Action:  streamCmd,
 				Flags: []cli.Flag{
@@ -77,6 +82,33 @@ func run(args []string) {
 						Name:  "output-folder",
 						Usage: "folder to write repos to",
 						Value: "output",
+					},
+				},
+			},
+			{
+				Name:    "hydrate",
+				Aliases: []string{"h"},
+				Usage:   "Hydrate CAR pulls into the same format as the stream",
+				Action:  hydrateCmd,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "input",
+						Usage:    "folder or file to read data from",
+						Required: true,
+					},
+					&cli.IntFlag{
+						Name:  "worker-count",
+						Usage: "number of workers to scale to",
+						Value: 32,
+					},
+					&cli.StringFlag{
+						Name:  "output-file",
+						Usage: "file to write output to (if specified, will attempt to backfill from the most recent event in the file)",
+						Value: "output.jsonl",
+					},
+					&cli.StringFlag{
+						Name:  "output-bq-table",
+						Usage: "name of a BigQuery table to output to in ID form (e.g., dgap_bsky.example_table)",
 					},
 				},
 			},
@@ -297,6 +329,131 @@ func repodumpCmd(cctx *cli.Context) error {
 			}
 		}
 	}()
+
+	select {
+	case <-signals:
+		cancel()
+		log.Infof("Shutting down on signal")
+	case <-ctx.Done():
+		log.Infof("Shutting down on context done")
+	}
+
+	return nil
+}
+
+func hydrateCmd(cctx *cli.Context) error {
+	ctx := cctx.Context
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Trap SIGINT to trigger a shutdown.
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+
+	// Create a client
+	log.Infof("Authenticating...")
+	authInfo, err := authenticate(cctx)
+	if err != nil {
+		log.Fatalf("Failed to authenticate: %+v", err)
+		return err
+	}
+
+	log.Infof("Creating hydrator...")
+	hydrator, err := hydrator.MakeHydrator(cctx.Context, cctx.Int64("cache-size"), authInfo)
+	if err != nil {
+		log.Fatalf("Failed to create hydrator: %+v", err)
+		return err
+	}
+
+	outputChannel := make(chan map[string]interface{})
+
+	log.Infof("Creating output...")
+	output, err := output.NewOutput(cctx, outputChannel)
+	if err != nil {
+		log.Fatalf("Failed to create output: %+v", err)
+		return err
+	}
+
+	// Setup the output
+	err = output.Setup()
+	if err != nil {
+		log.Fatalf("Failed to setup output: %+v", err)
+		return err
+	}
+
+	// Find all the CARs; i.e., every `.car` file in the input folder (could be nested)
+	// and then hydrate them.
+	carFiles := make(chan string)
+	go func() {
+		defer close(carFiles)
+		carFilesCount := 0
+		input := cctx.String("input")
+		err = filepath.Walk(input, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if strings.HasSuffix(path, ".car") {
+				carFiles <- path
+				carFilesCount++
+			}
+			return nil
+		})
+		if err != nil {
+			log.Fatalf("Failed to walk input folder: %+v", err)
+		}
+
+		log.Infof("Found %d car files to hydrate in %s.", carFilesCount, input)
+	}()
+
+	// Spawn workers to hydrate the CARs
+	for i := 0; i < cctx.Int("worker-count"); i++ {
+		go func() {
+			for carFile := range carFiles {
+				log.Infof("Hydrating %s", carFile)
+				// Read the car file
+				data, err := os.ReadFile(carFile)
+				if err != nil {
+					log.Errorf("Failed to read car file: %+v", err)
+					continue
+				}
+				repo, err := repo.ReadRepoFromCar(ctx, bytes.NewReader(data))
+				if err != nil {
+					log.Errorf("Failed to read repo from car: %+v", err)
+					continue
+				}
+				// Extract the actor (i.e., whose repo is this?)
+				actorDid := repo.RepoDid()
+
+				// Hydrate the repo
+				err = repo.ForEach(ctx, "", func(k string, v cid.Cid) error {
+					// Get the record
+					_, rec, err := repo.GetRecord(ctx, k)
+					if err != nil {
+						log.Errorf("Unable to parse CID %s from %s: %s", v.String(), actorDid, err)
+						return err
+					}
+
+					// Hydrate the record
+					hydrated, err := hydrator.Hydrate(rec, actorDid)
+					if err != nil {
+						log.Errorf("Failed to hydrate record: %+v", err)
+						return err
+					}
+
+					// Write the hydrated record to the output
+					outputChannel <- hydrated
+
+					return nil
+				})
+
+				if err != nil {
+					log.Errorf("Failed to hydrate repo: %+v", err)
+				}
+			}
+		}()
+	}
+
+	go output.StreamOutput(ctx)
 
 	select {
 	case <-signals:
