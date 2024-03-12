@@ -39,6 +39,10 @@ func MakeHydrator(ctx context.Context, cacheSize int64, authInfo *xrpc.AuthInfo)
 		NumCounters: 1e8, // number of keys to track frequency of
 		MaxCost:     cacheSize,
 		BufferItems: 64, // number of keys per Get buffer
+		Cost: func(value interface{}) int64 {
+			// Return the size in bytes of the value
+			return int64(len(value.([]byte)))
+		},
 	})
 
 	if err != nil {
