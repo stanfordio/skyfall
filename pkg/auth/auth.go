@@ -6,11 +6,11 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/stanfordio/skyfall/pkg/utils"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	indigoutil "github.com/bluesky-social/indigo/util"
 	"github.com/bluesky-social/indigo/xrpc"
 )
 
@@ -23,7 +23,7 @@ func MakeAuthenticator(ctx context.Context) (*Authenticator, error) {
 	a := Authenticator{
 		Context: ctx,
 		Client: &xrpc.Client{
-			Client: indigoutil.RobustHTTPClient(),
+			Client: utils.RetryingHTTPClient(),
 		},
 	}
 

@@ -1,9 +1,14 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"time"
+
+	"github.com/hashicorp/go-retryablehttp"
 )
 
 // From https://stackoverflow.com/questions/17863821/how-to-read-last-lines-from-a-big-file-with-go-every-10-secs
@@ -38,4 +43,19 @@ func GetLastLine(filepath string) (string, error) {
 	}
 
 	return line, nil
+}
+
+func RetryingHTTPClient() *http.Client {
+	retryClient := retryablehttp.NewClient()
+	retryClient.RetryMax = 10
+	retryClient.RetryWaitMin = 1 * time.Second
+	retryClient.RetryWaitMax = 15 * time.Minute
+	retryClient.CheckRetry = XRPCRetryPolicy
+	client := retryClient.StandardClient()
+	client.Timeout = 30 * time.Second
+	return client
+}
+
+func XRPCRetryPolicy(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
 }

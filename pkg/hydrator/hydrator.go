@@ -9,6 +9,7 @@ import (
 
 	"github.com/ipfs/go-cid"
 	log "github.com/sirupsen/logrus"
+	"github.com/stanfordio/skyfall/pkg/utils"
 	"go.uber.org/ratelimit"
 
 	"github.com/bluesky-social/indigo/api/atproto"
@@ -17,7 +18,6 @@ import (
 	atpidentity "github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/bluesky-social/indigo/repo"
-	indigoutil "github.com/bluesky-social/indigo/util"
 	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/dgraph-io/ristretto"
 	"github.com/mitchellh/mapstructure"
@@ -53,7 +53,7 @@ func MakeHydrator(ctx context.Context, cacheSize int64, authInfo *xrpc.AuthInfo)
 		Cache:   cache,
 		Context: ctx,
 		Client: &xrpc.Client{
-			Client: indigoutil.RobustHTTPClient(),
+			Client: utils.RetryingHTTPClient(),
 			Host:   "https://public.api.bsky.app", // We generally want to use the public.api.bsky.app host for all requests, since they are doing the indexing (and it's public with big rate limits)
 			Auth:   authInfo,
 		},

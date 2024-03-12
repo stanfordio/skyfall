@@ -9,10 +9,10 @@ import (
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/repo"
-	indigoutil "github.com/bluesky-social/indigo/util"
 	"github.com/bluesky-social/indigo/xrpc"
 	log "github.com/sirupsen/logrus"
 	"github.com/stanfordio/skyfall/pkg/hydrator"
+	"github.com/stanfordio/skyfall/pkg/utils"
 	// "github.com/bluesky-social/indigo/api/bsky"
 )
 
@@ -118,7 +118,7 @@ func (s *RepoDump) BeginDownloading(ctx context.Context) error {
 		s.PdsCompleted[pdsEndpoint] = true
 
 		xrpcClient := &xrpc.Client{
-			Client: indigoutil.RobustHTTPClient(),
+			Client: utils.RetryingHTTPClient(),
 			Host:   pdsEndpoint,
 		}
 
