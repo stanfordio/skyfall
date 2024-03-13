@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -83,7 +84,6 @@ func (a *Authenticator) Authenticate(identifier string, password string) (*xrpc.
 		Handle:     output.Handle,
 	}
 
-	a.Client.Auth = &info
 	go a.refreshTokenContinuously(output)
 	return &info, nil
 }
@@ -102,7 +102,8 @@ func (a *Authenticator) refreshTokenContinuously(authOutput *atproto.ServerCreat
 		_, error := atproto.ServerRefreshSession(a.Context, a.Client)
 
 		if error != nil {
-			log.Errorf("Error refreshing token: %+v", error)
+			log.Errorf("Error refreshing token: %+v; this is typically catastrophic, so shutting down", error)
+			os.Exit(1)
 		} else {
 			log.Debugf("Successfully refreshed access token")
 		}
