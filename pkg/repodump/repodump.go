@@ -5,6 +5,8 @@ package stream
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"os"
 	"sync"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
@@ -21,12 +23,18 @@ type CarOutput struct {
 	Data []byte
 }
 
-type RepoDump struct {
+type intermediateState struct {
 	PdsQueue     map[string]bool // Using a map as a set
 	PdsCompleted map[string]bool // Using a map as a set
-	SkipDids     func(string) bool
-	Hydrator     *hydrator.Hydrator
-	Output       chan CarOutput
+}
+
+type RepoDump struct {
+	PdsQueue              map[string]bool // Using a map as a set
+	PdsCompleted          map[string]bool // Using a map as a set
+	SkipDids              func(string) bool
+	IntermediateStatePath string
+	Hydrator              *hydrator.Hydrator
+	Output                chan CarOutput
 }
 
 type carPullRequest struct {
@@ -68,13 +76,22 @@ func (s *RepoDump) startRepoDownloader(ctx context.Context, carChan chan *carPul
 				log.Infof("Found %d identities in repo %s", len(identities), downloadRequest.did)
 
 				// Find the unique PDSes
-				// TODO: Is there a race condition here?
+				didFindNewPds := false
 				for _, identity := range identities {
 					if _, ok := s.PdsCompleted[identity.PDSEndpoint()]; !ok {
 						if _, ok := s.PdsQueue[identity.PDSEndpoint()]; !ok {
 							log.Infof("Adding PDS to queue: %s", identity.PDSEndpoint())
 							s.PdsQueue[identity.PDSEndpoint()] = true
+							didFindNewPds = true
 						}
+					}
+				}
+
+				if didFindNewPds {
+					// Save the state to disk
+					err = s.saveIntermediateStateToDisk()
+					if err != nil {
+						log.Errorf("Failed to save intermediate state to disk: %v", err)
 					}
 				}
 
@@ -87,6 +104,71 @@ func (s *RepoDump) startRepoDownloader(ctx context.Context, carChan chan *carPul
 			wg.Done()
 		}()
 	}
+}
+
+func (s *RepoDump) saveIntermediateStateToDisk() error {
+	// Saves the pull queue and the completed queue to disk so that we can
+	// resume the download later if needed.
+
+	state := intermediateState{
+		PdsQueue:     s.PdsQueue,
+		PdsCompleted: s.PdsCompleted,
+	}
+
+	// Marshall into json
+	out, err := json.Marshal(state)
+	if err != nil {
+		return err
+	}
+
+	err = os.WriteFile(s.IntermediateStatePath, out, 0644)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *RepoDump) loadIntermediateStateFromDisk() error {
+	// Loads the pull queue and the completed queue from disk.
+
+	// If the file exists, load it
+	if _, err := os.Stat(s.IntermediateStatePath); err == nil {
+		// Load the file
+		in, err := os.ReadFile(s.IntermediateStatePath)
+		if err != nil {
+			return err
+		}
+
+		// Unmarshall the json
+		state := intermediateState{
+			PdsQueue:     make(map[string]bool),
+			PdsCompleted: make(map[string]bool),
+		}
+		err = json.Unmarshal(in, &state)
+
+		if err != nil {
+			return err
+		}
+
+		importedCount := 0
+
+		// Set the state additively to the current state
+		for k, v := range state.PdsCompleted {
+			s.PdsCompleted[k] = v
+			importedCount++
+		}
+		for k, v := range state.PdsQueue {
+			if _, ok := s.PdsCompleted[k]; !ok {
+				s.PdsQueue[k] = v
+				importedCount++
+			}
+		}
+
+		log.Infof("Imported %d PDSes from intermediate state", importedCount)
+	}
+
+	return nil
 }
 
 func (s *RepoDump) BeginDownloading(ctx context.Context) error {
@@ -105,17 +187,27 @@ func (s *RepoDump) BeginDownloading(ctx context.Context) error {
 	var wg sync.WaitGroup
 	go s.startRepoDownloader(ctx, carDownloadChannel, &wg)
 
+	err = s.loadIntermediateStateFromDisk()
+	if err != nil {
+		log.Errorf("Failed to load intermediate state from disk, so will not be resuming from previous pull: %v", err)
+	}
+
 	// Add our own PDS to the queue
 	s.PdsQueue[selfIdentity.PDSEndpoint()] = true
 
 	for len(s.PdsQueue) > 0 {
-		// Pop the first PDS from the queue
+		// Save the state to disk
+		err = s.saveIntermediateStateToDisk()
+		if err != nil {
+			log.Errorf("Failed to save intermediate state to disk: %v", err)
+		}
+
+		// Pop the first PDS from the queue; we will move it to the completed queue
+		// once we are done with it (at the end of this loop iteration)
 		var pdsEndpoint string
 		for pdsEndpoint = range s.PdsQueue {
 			break
 		}
-		delete(s.PdsQueue, pdsEndpoint)
-		s.PdsCompleted[pdsEndpoint] = true
 
 		xrpcClient := &xrpc.Client{
 			Client: utils.RetryingHTTPClient(),
@@ -151,6 +243,9 @@ func (s *RepoDump) BeginDownloading(ctx context.Context) error {
 		log.Infof("Waiting for downloaders to finish on %s", pdsEndpoint)
 		wg.Wait()
 		log.Infof("Downloaders finished on %s", pdsEndpoint)
+
+		delete(s.PdsQueue, pdsEndpoint)
+		s.PdsCompleted[pdsEndpoint] = true
 	}
 
 	<-ctx.Done()

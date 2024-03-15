@@ -289,13 +289,21 @@ func repodumpCmd(cctx *cli.Context) error {
 		return true
 	}
 
+	// Create the output folder
+	err = os.MkdirAll(cctx.String("output-folder"), 0755)
+	if err != nil {
+		log.Fatalf("Failed to create output folder: %+v", err)
+		return err
+	}
+
 	// Create a client
 	client := &repodump.RepoDump{
-		PdsQueue:     make(map[string]bool),
-		PdsCompleted: make(map[string]bool),
-		SkipDids:     shouldSkip,
-		Hydrator:     hydrator,
-		Output:       make(chan repodump.CarOutput),
+		PdsQueue:              make(map[string]bool),
+		PdsCompleted:          make(map[string]bool),
+		SkipDids:              shouldSkip,
+		Hydrator:              hydrator,
+		IntermediateStatePath: fmt.Sprintf("%s/intermediate-state.json", cctx.String("output-folder")),
+		Output:                make(chan repodump.CarOutput),
 	}
 
 	// Start downloading repos
