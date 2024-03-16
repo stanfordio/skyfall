@@ -238,6 +238,9 @@ func (s *RepoDump) BeginDownloading(ctx context.Context) error {
 			}
 		}
 
+		// Close the channel so that the downloaders know that they are done
+		close(carDownloadChannel)
+
 		// Wait for the downloaders to finish on this PDS before moving on
 		// to the next one
 		log.Infof("Waiting for downloaders to finish on %s", pdsEndpoint)
