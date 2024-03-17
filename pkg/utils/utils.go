@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
+	log "github.com/sirupsen/logrus"
 )
 
 // From https://stackoverflow.com/questions/17863821/how-to-read-last-lines-from-a-big-file-with-go-every-10-secs
@@ -57,5 +59,13 @@ func RetryingHTTPClient() *http.Client {
 }
 
 func XRPCRetryPolicy(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	// Do not retry network errors, since these are usually because the PDS is dead
+	if err != nil {
+		if _, ok := err.(*net.OpError); !ok {
+			log.Warnf("Not retrying on error: %s", err.Error())
+			return false, err
+		}
+	}
+
 	return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
 }
