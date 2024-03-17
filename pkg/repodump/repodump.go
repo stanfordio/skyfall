@@ -42,8 +42,8 @@ type carPullRequest struct {
 	did         string
 }
 
-func (s *RepoDump) startRepoDownloader(ctx context.Context, carChan chan chan *carPullRequest, wg *sync.WaitGroup) {
-	for i := 0; i < 10; i++ {
+func (s *RepoDump) startRepoDownloader(ctx context.Context, numWorkers int, carChan chan chan *carPullRequest, wg *sync.WaitGroup) {
+	for i := 0; i < numWorkers; i++ {
 		go func() {
 			for carDownloadChannel := range carChan {
 				wg.Add(1)
@@ -173,7 +173,7 @@ func (s *RepoDump) loadIntermediateStateFromDisk() error {
 	return nil
 }
 
-func (s *RepoDump) BeginDownloading(ctx context.Context) error {
+func (s *RepoDump) BeginDownloading(ctx context.Context, numWorkers int) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -187,7 +187,7 @@ func (s *RepoDump) BeginDownloading(ctx context.Context) error {
 	// Start the downloader
 	carDownloadChannels := make(chan chan *carPullRequest) // A channel of channels; each subchannel is a queue of carPullRequests from the same PDS
 	var wg sync.WaitGroup
-	go s.startRepoDownloader(ctx, carDownloadChannels, &wg)
+	go s.startRepoDownloader(ctx, numWorkers, carDownloadChannels, &wg)
 
 	err = s.loadIntermediateStateFromDisk()
 	if err != nil {

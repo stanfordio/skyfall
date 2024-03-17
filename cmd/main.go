@@ -83,6 +83,11 @@ func run(args []string) {
 						Usage: "folder to write repos to",
 						Value: "output",
 					},
+					&cli.IntFlag{
+						Name:  "worker-count",
+						Usage: "number of workers to scale to",
+						Value: 32,
+					},
 				},
 			},
 			{
@@ -308,7 +313,7 @@ func repodumpCmd(cctx *cli.Context) error {
 
 	// Start downloading repos
 	go func() {
-		err := client.BeginDownloading(ctx)
+		err := client.BeginDownloading(ctx, cctx.Int("worker-count"))
 		log.Errorf("Downloading ended unexpectedly: %+v", err)
 		cancel()
 	}()
