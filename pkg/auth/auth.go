@@ -16,14 +16,18 @@ import (
 )
 
 type Authenticator struct {
-	Context context.Context
-	Client  *xrpc.Client
+	Context            context.Context
+	RefreshTokenClient *xrpc.Client
+	Client             *xrpc.Client
 }
 
 func MakeAuthenticator(ctx context.Context) (*Authenticator, error) {
 	a := Authenticator{
 		Context: ctx,
 		Client: &xrpc.Client{
+			Client: utils.RetryingHTTPClient(),
+		},
+		RefreshTokenClient: &xrpc.Client{
 			Client: utils.RetryingHTTPClient(),
 		},
 	}
@@ -83,23 +87,26 @@ func (a *Authenticator) Authenticate(identifier string, password string) (*xrpc.
 		Did:        output.Did,
 		Handle:     output.Handle,
 	}
+	a.RefreshTokenClient.Host = pdsEndpoint
 
-	go a.refreshTokenContinuously(output)
+	// Start a goroutine to refresh the token
+	go a.refreshTokenContinuously(&info)
 	return &info, nil
 }
 
-func (a *Authenticator) refreshTokenContinuously(authOutput *atproto.ServerCreateSession_Output) {
+func (a *Authenticator) refreshTokenContinuously(authInfo *xrpc.AuthInfo) {
 	// Put the refresh token into the access token slot. Janky, but this is what Bluesky expects.
 	// We intentionally create a new AuthInfo here.
-	a.Client.Auth = &xrpc.AuthInfo{
-		AccessJwt: authOutput.RefreshJwt,
-		Did:       authOutput.Did,
-		Handle:    authOutput.Handle,
-	}
 
 	// Send a refresh request every minute
 	for {
-		_, error := atproto.ServerRefreshSession(a.Context, a.Client)
+		a.RefreshTokenClient.Auth = &xrpc.AuthInfo{
+			AccessJwt: authInfo.RefreshJwt,
+			Did:       authInfo.Did,
+			Handle:    authInfo.Handle,
+		}
+
+		out, error := atproto.ServerRefreshSession(a.Context, a.RefreshTokenClient)
 
 		if error != nil {
 			log.Errorf("Error refreshing token: %+v; this is typically catastrophic, so shutting down", error)
@@ -108,6 +115,10 @@ func (a *Authenticator) refreshTokenContinuously(authOutput *atproto.ServerCreat
 			log.Debugf("Successfully refreshed access token")
 		}
 
-		time.Sleep(15 * time.Second)
+		// Update the access token for everyone else
+		authInfo.AccessJwt = out.AccessJwt
+		authInfo.RefreshJwt = out.RefreshJwt
+
+		time.Sleep(60 * time.Second)
 	}
 }
