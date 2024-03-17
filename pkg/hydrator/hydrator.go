@@ -82,6 +82,7 @@ func (h *Hydrator) LookupIdentity(identifier string) (identity *atpidentity.Iden
 
 	log.Debugf("Cache miss for %s", identifier)
 
+	h.Ratelimit.Take()
 	resolvedIdentifier, error := syntax.ParseAtIdentifier(identifier)
 	if error != nil {
 		err = error
@@ -109,6 +110,7 @@ func (h *Hydrator) lookupProfileFromIdentity(identity *atpidentity.Identity) (pr
 		return
 	}
 
+	h.Ratelimit.Take()
 	profile, err = bsky.ActorGetProfile(h.Context, h.Client, identity.Handle.String())
 
 	// Set the cache
@@ -141,6 +143,7 @@ func (h *Hydrator) lookupPost(atUrl string) (post *bsky.FeedDefs_PostView, err e
 
 	log.Debugf("Cache miss for %s", atUrl)
 
+	h.Ratelimit.Take()
 	output, err := bsky.FeedGetPosts(h.Context, h.Client, []string{atUrl})
 	if err != nil {
 		return
@@ -342,7 +345,6 @@ func (h *Hydrator) GetRepoBytes(actorDid string, pdsEndpoint string) ([]byte, er
 		return repo, nil
 	}
 
-	h.Ratelimit.Take()
 	xrpcc := xrpc.Client{
 		Host: pdsEndpoint,
 	}
