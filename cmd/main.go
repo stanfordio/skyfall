@@ -149,12 +149,25 @@ func authenticate(cctx *cli.Context) (*xrpc.AuthInfo, error) {
 		return nil, err
 	}
 
-	password := os.Getenv("BSKY_PASSWORD")
-	if password == "" {
-		password = cctx.String("password")
+	handle := os.Getenv("BLUESKY_HANDLE")
+	if handle == "" {
+		handle = cctx.String("handle")
+		if handle == "" {
+			log.Fatal("No handle provided")
+			return nil, errors.New("No handle provided")
+		}
 	}
 
-	authInfo, err := authenticator.Authenticate(cctx.String("handle"), password)
+	password := os.Getenv("BLUESKY_PASSWORD")
+	if password == "" {
+		password = cctx.String("password")
+		if password == "" {
+			log.Fatal("No password provided")
+			return nil, errors.New("No password provided")
+		}
+	}
+
+	authInfo, err := authenticator.Authenticate(handle, password)
 	if err != nil {
 		log.Fatalf("Failed to authenticate: %+v", err)
 		return nil, err
