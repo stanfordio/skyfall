@@ -149,7 +149,12 @@ func authenticate(cctx *cli.Context) (*xrpc.AuthInfo, error) {
 		return nil, err
 	}
 
-	authInfo, err := authenticator.Authenticate(cctx.String("handle"), cctx.String("password"))
+	password := os.Getenv("BSKY_PASSWORD")
+	if password == "" {
+		password = cctx.String("password")
+	}
+
+	authInfo, err := authenticator.Authenticate(cctx.String("handle"), password)
 	if err != nil {
 		log.Fatalf("Failed to authenticate: %+v", err)
 		return nil, err
