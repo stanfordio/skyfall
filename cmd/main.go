@@ -36,10 +36,9 @@ func run(args []string) {
 		Version: "prerelease",
 		Commands: []*cli.Command{
 			{
-				Name:    "stream",
-				Aliases: []string{"s"},
-				Usage:   "Sip from the firehose",
-				Action:  streamCmd,
+				Name:   "stream",
+				Usage:  "Sip from the firehose",
+				Action: streamCmd,
 				Flags: []cli.Flag{
 					&cli.IntFlag{
 						Name:  "worker-count",
@@ -73,10 +72,9 @@ func run(args []string) {
 				},
 			},
 			{
-				Name:    "repodump",
-				Aliases: []string{"d"},
-				Usage:   "Dump everyone's repos (as CAR) into a folder",
-				Action:  repodumpCmd,
+				Name:   "repodump",
+				Usage:  "Dump everyone's repos (as CAR) into a folder",
+				Action: repodumpCmd,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:  "output-folder",
@@ -91,10 +89,9 @@ func run(args []string) {
 				},
 			},
 			{
-				Name:    "hydrate",
-				Aliases: []string{"h"},
-				Usage:   "Hydrate CAR pulls into the same format as the stream",
-				Action:  hydrateCmd,
+				Name:   "hydrate",
+				Usage:  "Hydrate CAR pulls into the same format as the stream",
+				Action: hydrateCmd,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:     "input",

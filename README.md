@@ -24,10 +24,10 @@ VERSION:
    prerelease
 
 COMMANDS:
-   stream, s    Sip from the firehose
-   repodump, d  Dump everyone's repos (as CAR) into a folder
-   hydrate, h   Hydrate CAR pulls into the same format as the stream
-   help, h      Shows a list of commands or help for one command
+   stream    Sip from the firehose
+   repodump  Dump everyone's repos (as CAR) into a folder
+   hydrate   Hydrate CAR pulls into the same format as the stream
+   help      Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
    --cache-size value  maximum size of the cache, in bytes (default: 4294967296)
