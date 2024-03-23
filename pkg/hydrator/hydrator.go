@@ -14,6 +14,7 @@ import (
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/api/bsky"
+	"github.com/bluesky-social/indigo/atproto/crypto"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	atpidentity "github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
@@ -168,9 +169,12 @@ func (h *Hydrator) flattenIdentity(identity *atpidentity.Identity) (result map[s
 
 	result = make(map[string]interface{})
 
+	var pk crypto.PublicKey
+	pk, _ = identity.PublicKey()
+
 	result["DID"] = identity.Handle.String()
 	result["Handle"] = identity.Handle
-	result["DIDKey"] = identity.ParsedPublicKey.DIDKey()
+	result["DIDKey"] = pk.DIDKey()
 	result["PDS"] = identity.PDSEndpoint()
 
 	return
