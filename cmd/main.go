@@ -318,8 +318,7 @@ func repodumpCmd(cctx *cli.Context) error {
 
 	// Create a client
 	client := &repodump.RepoDump{
-		PdsQueue:              make(map[string]bool),
-		PdsCompleted:          make(map[string]bool),
+		PdsCursor:             "",
 		SkipDids:              shouldSkip,
 		Hydrator:              hydrator,
 		IntermediateStatePath: fmt.Sprintf("%s/intermediate-state.json", cctx.String("output-folder")),
