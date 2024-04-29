@@ -1,36 +1,31 @@
-package stream
-
-// Borrowed in part from https://github.com/bluesky-social/indigo/blob/main/sonar/sonar.go
+package pull
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
 	"sync"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/repo"
 	"github.com/bluesky-social/indigo/xrpc"
+	"github.com/ipfs/go-cid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stanfordio/skyfall/pkg/hydrator"
 	"github.com/stanfordio/skyfall/pkg/utils"
 	// "github.com/bluesky-social/indigo/api/bsky"
 )
 
-type CarOutput struct {
-	Did  string
-	Data []byte
-}
-
 type intermediateState struct {
 	PdsCursor string
 }
 
-type RepoDump struct {
+type Pull struct {
 	PdsCursor             string
-	SkipDids              func(string) bool
 	IntermediateStatePath string
+	Output                chan map[string]interface{}
 	Hydrator              *hydrator.Hydrator
-	Output                chan CarOutput
 }
 
 type carPullRequest struct {
@@ -38,16 +33,12 @@ type carPullRequest struct {
 	did         string
 }
 
-func (s *RepoDump) startRepoDownloader(_ctx context.Context, numWorkers int, carChan chan *carPullRequest, wg *sync.WaitGroup) {
+func (s *Pull) startDownloader(ctx context.Context, numWorkers int, carChan chan *carPullRequest, wg *sync.WaitGroup) {
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			for downloadRequest := range carChan {
 				// Download the car
-				if s.SkipDids(downloadRequest.did) {
-					log.Infof("Skipping car: %s from %s (likely already downloaded)", downloadRequest.did, downloadRequest.pdsEndpoint)
-					continue
-				}
 				log.Infof("Downloading car: %s from %s", downloadRequest.did, downloadRequest.pdsEndpoint)
 
 				// Pull the bytes
@@ -56,11 +47,39 @@ func (s *RepoDump) startRepoDownloader(_ctx context.Context, numWorkers int, car
 					log.Errorf("Failed to download car %s from %s: %v", downloadRequest.did, downloadRequest.pdsEndpoint, err)
 					continue
 				}
+				repo, err := repo.ReadRepoFromCar(ctx, bytes.NewReader(repoBytes))
+				if err != nil {
+					log.Errorf("Failed to read car %s from %s: %v", downloadRequest.did, downloadRequest.pdsEndpoint, err)
+					continue
+				}
 
-				// Write the bytes to the output channel
-				s.Output <- CarOutput{
-					Did:  downloadRequest.did,
-					Data: repoBytes,
+				actorDid := repo.RepoDid()
+
+				// Hydrate the car and send it to the output
+				err = repo.ForEach(ctx, "", func(k string, v cid.Cid) error {
+					// Grab the record from the merkel tree
+					_, rec, err := repo.GetRecord(ctx, k)
+					if err != nil {
+						log.Errorf("Failed to get record %s from car %s from %s: %v", v.String(), downloadRequest.did, downloadRequest.pdsEndpoint, err)
+						return err
+					}
+
+					// Hydrate the record
+					hydrated, err := s.Hydrator.Hydrate(rec, actorDid)
+					if err != nil {
+						log.Errorf("Failed to hydrate record: %+v", err)
+						return err
+					}
+
+					// Output the record (it'll be thrown into BigQuery or the
+					// output file)
+					s.Output <- hydrated
+
+					return nil
+				})
+				if err != nil {
+					log.Errorf("Failed to hydrate car %s from %s: %v", downloadRequest.did, downloadRequest.pdsEndpoint, err)
+					continue
 				}
 			}
 			wg.Done()
@@ -68,7 +87,7 @@ func (s *RepoDump) startRepoDownloader(_ctx context.Context, numWorkers int, car
 	}
 }
 
-func (s *RepoDump) saveIntermediateStateToDisk() error {
+func (s *Pull) saveIntermediateStateToDisk() error {
 	// Saves the pull queue and the completed queue to disk so that we can
 	// resume the download later if needed.
 
@@ -90,7 +109,7 @@ func (s *RepoDump) saveIntermediateStateToDisk() error {
 	return nil
 }
 
-func (s *RepoDump) loadIntermediateStateFromDisk() error {
+func (s *Pull) loadIntermediateStateFromDisk() error {
 	// Loads the pull queue and the completed queue from disk.
 
 	// If the file exists, load it
@@ -115,14 +134,14 @@ func (s *RepoDump) loadIntermediateStateFromDisk() error {
 	return nil
 }
 
-func (s *RepoDump) BeginDownloading(ctx context.Context, numWorkers int) error {
+func (s *Pull) BeginDownloading(ctx context.Context, numWorkers int) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Start the downloader
-	carDownloadChannel := make(chan *carPullRequest) // A channel of channels; each subchannel is a queue of carPullRequests from the same PDS
+	carDownloadChannel := make(chan *carPullRequest)
 	var wg sync.WaitGroup
-	go s.startRepoDownloader(ctx, numWorkers, carDownloadChannel, &wg)
+	go s.startDownloader(ctx, numWorkers, carDownloadChannel, &wg)
 
 	err := s.loadIntermediateStateFromDisk()
 	if err != nil {
@@ -173,6 +192,9 @@ func (s *RepoDump) BeginDownloading(ctx context.Context, numWorkers int) error {
 	log.Infof("Waiting for downloaders to finish on %s", pdsEndpoint)
 	wg.Wait()
 	log.Infof("Downloaders finished on %s", pdsEndpoint)
+
+	// Close the output channel
+	close(s.Output)
 
 	<-ctx.Done()
 	log.Infof("Shutting down...")

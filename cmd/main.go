@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"net/url"
 	"os"
 	"os/signal"
@@ -18,7 +17,7 @@ import (
 	"github.com/stanfordio/skyfall/pkg/auth"
 	"github.com/stanfordio/skyfall/pkg/hydrator"
 	"github.com/stanfordio/skyfall/pkg/output"
-	repodump "github.com/stanfordio/skyfall/pkg/repodump"
+	pull "github.com/stanfordio/skyfall/pkg/pull"
 	stream "github.com/stanfordio/skyfall/pkg/stream"
 	"github.com/urfave/cli/v2"
 
@@ -72,25 +71,39 @@ func run(args []string) {
 				},
 			},
 			{
-				Name:   "repodump",
-				Usage:  "Dump everyone's repos (as CAR) into a folder",
-				Action: repodumpCmd,
+				Name:   "pull",
+				Usage:  "Pull all content and write it to a file or BigQuery",
+				Action: pullCmd,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
-						Name:  "output-folder",
-						Usage: "folder to write repos to",
-						Value: "output",
+						Name:  "intermediate-state",
+						Usage: "file to intermediate state to (important for resumption)",
+						Value: "pull-intermediate-state.json",
 					},
 					&cli.IntFlag{
 						Name:  "worker-count",
 						Usage: "number of workers to scale to",
 						Value: 32,
 					},
+					&cli.StringFlag{
+						Name:  "output-file",
+						Usage: "file to write output to (if specified, will attempt to backfill from the most recent event in the file)",
+						Value: "output.jsonl",
+					},
+					&cli.BoolFlag{
+						Name:  "stringify-full",
+						Usage: "whether to stringify the full event in file output (if true, the JSON will be stringified; this is helpful when you want output to match what would be sent to BigQuery)",
+						Value: false,
+					},
+					&cli.StringFlag{
+						Name:  "output-bq-table",
+						Usage: "name of a BigQuery table to output to in ID form (e.g., dgap_bsky.example_table)",
+					},
 				},
 			},
 			{
 				Name:   "hydrate",
-				Usage:  "Hydrate CAR pulls into the same format as the stream",
+				Usage:  "Hydrate a folder of .car files into the same format as the stream",
 				Action: hydrateCmd,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
@@ -271,7 +284,7 @@ func streamCmd(cctx *cli.Context) error {
 	return nil
 }
 
-func repodumpCmd(cctx *cli.Context) error {
+func pullCmd(cctx *cli.Context) error {
 	ctx := cctx.Context
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -293,36 +306,29 @@ func repodumpCmd(cctx *cli.Context) error {
 		return err
 	}
 
-	// Create a function to help the repodump tool know which repos to skip
-	// (I.e., repos that are already on the disk.)
-	didDownloadPath := func(did string) (string, string) {
-		folder := fmt.Sprintf("%s/%s/%s", cctx.String("output-folder"), did[8:10], did[10:12])
-		locationOnDisk := fmt.Sprintf("%s/%s.car", folder, did)
-		return folder, locationOnDisk
-	}
-	shouldSkip := func(did string) bool {
-		_, loc := didDownloadPath(did)
-		// Check if the file exists
-		if _, err := os.Stat(loc); errors.Is(err, os.ErrNotExist) {
-			return false
-		}
-		return true
+	// Create the output channel
+	outputChannel := make(chan map[string]interface{})
+
+	// Create a client
+	client := &pull.Pull{
+		PdsCursor:             "",
+		IntermediateStatePath: cctx.String("intermediate-state"),
+		Output:                outputChannel,
+		Hydrator:              hydrator,
 	}
 
-	// Create the output folder
-	err = os.MkdirAll(cctx.String("output-folder"), 0755)
+	// Setup the output
+	output, err := output.NewOutput(cctx, outputChannel)
 	if err != nil {
-		log.Fatalf("Failed to create output folder: %+v", err)
+		log.Fatalf("Failed to create output: %+v", err)
 		return err
 	}
 
-	// Create a client
-	client := &repodump.RepoDump{
-		PdsCursor:             "",
-		SkipDids:              shouldSkip,
-		Hydrator:              hydrator,
-		IntermediateStatePath: fmt.Sprintf("%s/intermediate-state.json", cctx.String("output-folder")),
-		Output:                make(chan repodump.CarOutput),
+	// Setup the output
+	err = output.Setup()
+	if err != nil {
+		log.Fatalf("Failed to setup output: %+v", err)
+		return err
 	}
 
 	// Start downloading repos
@@ -332,30 +338,8 @@ func repodumpCmd(cctx *cli.Context) error {
 		cancel()
 	}()
 
-	// Start writing repos to the output folder
-	go func() {
-		for carOutput := range client.Output {
-			// The folder is the output folder, followed by the first two
-			// characters of the DID, followed by the second two characters of
-			// the DID e.g., output/ab/12/did:plc:ab1234.car. This is to prevent too
-			// many files in a single directory. Note that we have to skip the `did:plc:`
-			// prefix.
-			folder, locationOnDisk := didDownloadPath(carOutput.Did)
-
-			// Ensure necessary directories exist
-			err := os.MkdirAll(folder, 0755)
-			if err != nil {
-				log.Errorf("Failed to create output folder: %+v", err)
-				continue
-			}
-
-			// Write the car to disk
-			err = os.WriteFile(locationOnDisk, carOutput.Data, 0644)
-			if err != nil {
-				log.Errorf("Failed to write car to output folder: %+v", err)
-			}
-		}
-	}()
+	// Start the output stream
+	go output.StreamOutput(ctx)
 
 	select {
 	case <-signals:

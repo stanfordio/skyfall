@@ -18,16 +18,16 @@ NAME:
    skyfall - A simple CLI for Bluesky data ingest
 
 USAGE:
-   skyfall [global options] command [command options] [arguments...]
+   skyfall [global options] command [command options] 
 
 VERSION:
    prerelease
 
 COMMANDS:
-   stream    Sip from the firehose
-   repodump  Dump everyone's repos (as CAR) into a folder
-   hydrate   Hydrate CAR pulls into the same format as the stream
-   help      Shows a list of commands or help for one command
+   stream   Sip from the firehose
+   pull     Pull all content and write it to a file or BigQuery
+   hydrate  Hydrate a folder of .car files into the same format as the stream
+   help, h  Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
    --cache-size value  maximum size of the cache, in bytes (default: 4294967296)
@@ -65,26 +65,32 @@ go run cmd/main.go --handle <handle> --password <password> stream --output-file 
 go run cmd/main.go --handle <handle> --password <password> stream --output-bq-table dgap_bsky.example_table
 ```
 
-### Dump repos
+### Pull everything (from Bluesky)
 
 ```
 NAME:
-   skyfall repodump - Dump everyone's repos (as CAR) into a folder
+   skyfall pull - Pull all content and write it to a file or BigQuery
 
 USAGE:
-   skyfall repodump [command options] [arguments...]
+   skyfall pull [command options] [arguments...]
 
 OPTIONS:
-   --output-folder value  folder to write repos to (default: "output")
-   --help, -h             show help
+   --intermediate-state value  file to intermediate state to (important for resumption) (default: "pull-intermediate-state.json")
+   --worker-count value        number of workers to scale to (default: 32)
+   --output-file value         file to write output to (if specified, will attempt to backfill from the most recent event in the file) (default: "output.jsonl")
+   --stringify-full            whether to stringify the full event in file output (if true, the JSON will be stringified; this is helpful when you want output to match what would be sent to BigQuery) (default: false)
+   --output-bq-table value     name of a BigQuery table to output to in ID form (e.g., dgap_bsky.example_table)
+   --help, -h                  show help
 ```
 
-The folder will be broken up into subfolders based on the DID to prevent any one folder from getting too large.
+This command will iterate through all the repos available on the main Bluesky network, iterate through all the records in each repo, hydrate each record, and output the records to a file or BigQuery.
+
+Note that because this command may take a long time to run, it will save intermediate state to a file. If you want to resume the pull, you can pass the `--intermediate-state` flag with the path to the intermediate state file. The pull will resume from where it left off, but note that there is no guarantee that the cursor is "stable" across long pauses. There may be small gaps or overlaps in the data.
 
 Example usage:
 
 ```
-go run cmd/main.go --handle <handle> --password <password> repodump --output-folder repos
+go run cmd/main.go --handle <handle> --password <password> pull
 ```
 
 ### Hydrate
