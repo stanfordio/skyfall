@@ -60,7 +60,7 @@ func MakeHydrator(ctx context.Context, cacheSize int64, authInfo *xrpc.AuthInfo)
 		},
 		IdentityDirectory: atpidentity.DefaultDirectory(),
 		AuthInfo:          authInfo,
-		Ratelimit:         ratelimit.New(10), // 10 requests per second, or 3000 per 5 minutes
+		Ratelimit:         ratelimit.New(1000), // 1000 requests per second; empirically we find that this is fine
 	}
 
 	return &h, nil
