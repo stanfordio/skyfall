@@ -55,6 +55,7 @@ func RetryingHTTPClient() *http.Client {
 	retryClient.CheckRetry = XRPCRetryPolicy
 	client := retryClient.StandardClient()
 	client.Timeout = 30 * time.Second
+
 	return client
 }
 

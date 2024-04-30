@@ -129,6 +129,8 @@ func (s *Pull) loadIntermediateStateFromDisk() error {
 		if err != nil {
 			return err
 		}
+
+		s.PdsCursor = state.PdsCursor
 	}
 
 	return nil
@@ -146,6 +148,8 @@ func (s *Pull) BeginDownloading(ctx context.Context, numWorkers int) error {
 	err := s.loadIntermediateStateFromDisk()
 	if err != nil {
 		log.Errorf("Failed to load intermediate state from disk, so will not be resuming from previous pull: %v", err)
+	} else {
+		log.Infof("Loaded intermediate state from disk; cursor = %s", s.PdsCursor)
 	}
 
 	pdsEndpoint := "https://bsky.network"
@@ -162,6 +166,8 @@ func (s *Pull) BeginDownloading(ctx context.Context, numWorkers int) error {
 		if err != nil {
 			log.Errorf("Failed to get list of repos: %v", err)
 			return err
+		} else {
+			log.Infof("Got %d repos from %s (cursor = %s)", len(out.Repos), pdsEndpoint, s.PdsCursor)
 		}
 		if len(out.Repos) == 0 {
 			log.Infof("Finished pulling DIDs from: %s", pdsEndpoint)
