@@ -307,7 +307,7 @@ func pullCmd(cctx *cli.Context) error {
 	}
 
 	// Create the output channel
-	outputChannel := make(chan map[string]interface{})
+	outputChannel := make(chan map[string]interface{}, 10000)
 
 	// Create a client
 	client := &pull.Pull{

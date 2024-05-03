@@ -174,7 +174,6 @@ func (s *Pull) BeginDownloading(ctx context.Context, numWorkers int) error {
 			break
 		}
 		s.PdsCursor = *out.Cursor
-		err = s.saveIntermediateStateToDisk()
 		if err != nil {
 			log.Errorf("Failed to save intermediate state to disk: %v", err)
 			return err
@@ -188,6 +187,8 @@ func (s *Pull) BeginDownloading(ctx context.Context, numWorkers int) error {
 				did:         r.Did,
 			}
 		}
+
+		err = s.saveIntermediateStateToDisk()
 	}
 
 	// Close the channel so that the downloaders know that they are done
