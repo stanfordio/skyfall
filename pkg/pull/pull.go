@@ -38,58 +38,64 @@ type carPullRequest struct {
 	censusFileIndex uint64 // Given Bluesky's current size, this would overflow if we used uint32
 }
 
+func (s *Pull) handleDownloadRequest(ctx context.Context, carChan chan *carPullRequest, downloadRequest *carPullRequest) error {
+	// Download the car
+	log.Infof("Downloading car: %s from %s", downloadRequest.did, downloadRequest.pdsEndpoint)
+
+	// Eventually the state management goroutine that we've pulled this DID
+	defer func() { s.CompletedIndicesChannel <- downloadRequest.censusFileIndex }()
+
+	// Pull the bytes
+	repoBytes, err := s.Hydrator.GetRepoBytes(downloadRequest.did, downloadRequest.pdsEndpoint)
+	if err != nil {
+		log.Errorf("Failed to download car %s from %s: %v", downloadRequest.did, downloadRequest.pdsEndpoint, err)
+		return err
+	}
+	repo, err := repo.ReadRepoFromCar(ctx, bytes.NewReader(repoBytes))
+	if err != nil {
+		log.Errorf("Failed to read car %s from %s: %v", downloadRequest.did, downloadRequest.pdsEndpoint, err)
+		return err
+	}
+
+	actorDid := repo.RepoDid()
+
+	// Hydrate the car and send it to the output
+	err = repo.ForEach(ctx, "", func(k string, v cid.Cid) error {
+		// Grab the record from the merkel tree
+		_, rec, err := repo.GetRecord(ctx, k)
+		if err != nil {
+			log.Errorf("Failed to get record %s from car %s from %s: %v", v.String(), downloadRequest.did, downloadRequest.pdsEndpoint, err)
+			return err
+		}
+
+		// Hydrate the record
+		hydrated, err := s.Hydrator.Hydrate(rec, actorDid)
+		if err != nil {
+			log.Errorf("Failed to hydrate record: %+v", err)
+			return err
+		}
+
+		// Output the record (it'll be thrown into BigQuery or the
+		// output file)
+		s.Output <- hydrated
+
+		return nil
+	})
+
+	if err != nil {
+		log.Errorf("Failed to hydrate car %s from %s: %v", downloadRequest.did, downloadRequest.pdsEndpoint, err)
+		return err
+	}
+
+	return nil
+}
+
 func (s *Pull) startDownloader(ctx context.Context, numWorkers int, carChan chan *carPullRequest, wg *sync.WaitGroup) {
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			for downloadRequest := range carChan {
-				// Download the car
-				log.Infof("Downloading car: %s from %s", downloadRequest.did, downloadRequest.pdsEndpoint)
-
-				// Pull the bytes
-				repoBytes, err := s.Hydrator.GetRepoBytes(downloadRequest.did, downloadRequest.pdsEndpoint)
-				if err != nil {
-					log.Errorf("Failed to download car %s from %s: %v", downloadRequest.did, downloadRequest.pdsEndpoint, err)
-					continue
-				}
-				repo, err := repo.ReadRepoFromCar(ctx, bytes.NewReader(repoBytes))
-				if err != nil {
-					log.Errorf("Failed to read car %s from %s: %v", downloadRequest.did, downloadRequest.pdsEndpoint, err)
-					continue
-				}
-
-				actorDid := repo.RepoDid()
-
-				// Hydrate the car and send it to the output
-				err = repo.ForEach(ctx, "", func(k string, v cid.Cid) error {
-					// Grab the record from the merkel tree
-					_, rec, err := repo.GetRecord(ctx, k)
-					if err != nil {
-						log.Errorf("Failed to get record %s from car %s from %s: %v", v.String(), downloadRequest.did, downloadRequest.pdsEndpoint, err)
-						return err
-					}
-
-					// Hydrate the record
-					hydrated, err := s.Hydrator.Hydrate(rec, actorDid)
-					if err != nil {
-						log.Errorf("Failed to hydrate record: %+v", err)
-						return err
-					}
-
-					// Output the record (it'll be thrown into BigQuery or the
-					// output file)
-					s.Output <- hydrated
-
-					return nil
-				})
-
-				// Notify the state management goroutine that we've pulled this DID
-				s.CompletedIndicesChannel <- downloadRequest.censusFileIndex
-
-				if err != nil {
-					log.Errorf("Failed to hydrate car %s from %s: %v", downloadRequest.did, downloadRequest.pdsEndpoint, err)
-					continue
-				}
+				s.handleDownloadRequest(ctx, carChan, downloadRequest)
 			}
 			wg.Done()
 		}()
@@ -157,6 +163,7 @@ func (s *Pull) keepIntermediateStateUpdated() {
 
 		// While the first element in the list is the next one in the sequence,
 		// increment the first element and remove it from the list
+		log.Debugf("First unpulled DID index: %d, earliest unprocessed: %d", s.FirstUnpulledDidIndex, s.RecentlyPulledCensusIndices[0])
 		for len(s.RecentlyPulledCensusIndices) > 0 && s.RecentlyPulledCensusIndices[0] <= s.FirstUnpulledDidIndex {
 			s.FirstUnpulledDidIndex = s.RecentlyPulledCensusIndices[0] + 1
 			s.RecentlyPulledCensusIndices = s.RecentlyPulledCensusIndices[1:]
