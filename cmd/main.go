@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 
+	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/repo"
 	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/ipfs/go-cid"
@@ -19,6 +21,7 @@ import (
 	"github.com/stanfordio/skyfall/pkg/output"
 	pull "github.com/stanfordio/skyfall/pkg/pull"
 	stream "github.com/stanfordio/skyfall/pkg/stream"
+	"github.com/stanfordio/skyfall/pkg/utils"
 	"github.com/urfave/cli/v2"
 
 	log "github.com/sirupsen/logrus"
@@ -71,14 +74,31 @@ func run(args []string) {
 				},
 			},
 			{
+				Name:   "census",
+				Usage:  "Pull all DIDs from the network, likely so that you can later pull them; does not require any authentication!",
+				Action: censusCmd,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "pds-endpoint",
+						Usage: "PDS endpoint to pull from; if you use bsky's PDS 'aggregator', we find empirically you'll get most accounts",
+						Value: "https://bsky.network",
+					},
+					&cli.StringFlag{
+						Name:  "output-file",
+						Usage: "file to write output to",
+						Value: "census.jsonl",
+					},
+				},
+			},
+			{
 				Name:   "pull",
-				Usage:  "Pull all content and write it to a file or BigQuery",
+				Usage:  "Pull all content and write it to a file or BigQuery; does not require any authentication!",
 				Action: pullCmd,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
-						Name:  "intermediate-state",
-						Usage: "file to intermediate state to (important for resumption)",
-						Value: "pull-intermediate-state.json",
+						Name:  "census-file",
+						Usage: "file with census data (see the `census` command); census data is a list of DIDs to pull, along with the status of whether they have been pulled",
+						Value: "census.jsonl",
 					},
 					&cli.IntFlag{
 						Name:  "worker-count",
@@ -279,6 +299,84 @@ func streamCmd(cctx *cli.Context) error {
 		log.Infof("Shutting down on signal")
 	case <-ctx.Done():
 		log.Infof("Shutting down on context done")
+	}
+
+	return nil
+}
+
+func censusCmd(cctx *cli.Context) error {
+	ctx := cctx.Context
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Trap SIGINT to trigger a shutdown.
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+
+	// Open the output file
+	outputFile, err := os.Create(cctx.String("output-file"))
+	if err != nil {
+		log.Fatalf("Failed to open output file: %+v", err)
+		return err
+	}
+	defer outputFile.Close()
+
+	// Authenticate
+	// authInfo, err := authenticate(cctx)
+	// if err != nil {
+	// 	log.Fatalf("Failed to authenticate: %+v", err)
+	// 	return err
+	// }
+
+	// This command is pretty simple; it doesn't require it's own package. It
+	// lists all the users on the network, then for each one outputs a JSON
+	// object with the user's DID, some basic metadata, and "_pulled": false
+	// (indicating that we haven't pulled their data yet). The output of this
+	// command can be fed to the pull command to pull all the data from all the
+	// users on the network, with hydration.
+	pdsEndpoint := cctx.String("pds-endpoint")
+
+	xrpcClient := &xrpc.Client{
+		Client: utils.RetryingHTTPClient(),
+		Host:   pdsEndpoint,
+	}
+
+	cursor := ""
+
+	for {
+		out, err := comatproto.SyncListRepos(ctx, xrpcClient, cursor, 1000)
+		if err != nil {
+			log.Errorf("Failed to get list of repos: %v", err)
+			return err
+		} else {
+			log.Infof("Got %d repos from %s (cursor = %s)", len(out.Repos), pdsEndpoint, cursor)
+		}
+
+		if len(out.Repos) == 0 {
+			log.Infof("Finished pulling DIDs from: %s", pdsEndpoint)
+			break
+		}
+		cursor = *out.Cursor
+
+		for _, r := range out.Repos {
+			// Write the repo information to the output file
+			data := map[string]interface{}{
+				"did":     r.Did,
+				"head":    r.Head,
+				"rev":     r.Rev,
+				"_pulled": false,
+			}
+
+			// Marshall + write to file, with newline
+			marshalled, err := json.Marshal(data)
+			if err != nil {
+				// If this fails, uh, what? How could this fail? Must be a
+				// cosmic ray or something.
+				log.Errorf("Failed to marshal data: %+v", err)
+				return err
+			}
+			outputFile.Write(append(marshalled, '\n'))
+		}
 	}
 
 	return nil
