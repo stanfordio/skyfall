@@ -141,7 +141,7 @@ func (s *Pull) BeginDownloading(ctx context.Context, numWorkers int) error {
 	defer cancel()
 
 	// Start the downloader
-	carDownloadChannel := make(chan *carPullRequest)
+	carDownloadChannel := make(chan *carPullRequest, 10000)
 	var wg sync.WaitGroup
 	go s.startDownloader(ctx, numWorkers, carDownloadChannel, &wg)
 

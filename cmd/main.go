@@ -214,7 +214,7 @@ func streamCmd(cctx *cli.Context) error {
 		return err
 	}
 
-	outputChannel := make(chan map[string]interface{})
+	outputChannel := make(chan map[string]interface{}, 10000)
 
 	output, err := output.NewOutput(cctx, outputChannel)
 	if err != nil {
@@ -376,7 +376,7 @@ func hydrateCmd(cctx *cli.Context) error {
 		return err
 	}
 
-	outputChannel := make(chan map[string]interface{})
+	outputChannel := make(chan map[string]interface{}, 10000)
 
 	log.Infof("Creating output...")
 	output, err := output.NewOutput(cctx, outputChannel)
@@ -394,7 +394,7 @@ func hydrateCmd(cctx *cli.Context) error {
 
 	// Find all the CARs; i.e., every `.car` file in the input folder (could be nested)
 	// and then hydrate them.
-	carFiles := make(chan string)
+	carFiles := make(chan string, 10000)
 	go func() {
 		defer close(carFiles)
 		carFilesCount := 0

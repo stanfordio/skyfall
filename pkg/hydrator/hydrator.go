@@ -101,6 +101,10 @@ func (h *Hydrator) LookupIdentity(identifier string) (identity *atpidentity.Iden
 }
 
 func (h *Hydrator) lookupProfileFromIdentity(identity *atpidentity.Identity) (profile *bsky.ActorDefs_ProfileViewDetailed, err error) {
+	if identity == nil {
+		return
+	}
+
 	key := namespaceKey("profile", identity.Handle.String())
 
 	// Check the cache first
