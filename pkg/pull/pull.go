@@ -38,7 +38,7 @@ type carPullRequest struct {
 	censusFileIndex uint64 // Given Bluesky's current size, this would overflow if we used uint32
 }
 
-func (s *Pull) handleDownloadRequest(ctx context.Context, carChan chan *carPullRequest, downloadRequest *carPullRequest) error {
+func (s *Pull) handleDownloadRequest(ctx context.Context, downloadRequest *carPullRequest) error {
 	// Download the car
 	log.Infof("Downloading car: %s from %s", downloadRequest.did, downloadRequest.pdsEndpoint)
 
@@ -95,7 +95,7 @@ func (s *Pull) startDownloader(ctx context.Context, numWorkers int, carChan chan
 		wg.Add(1)
 		go func() {
 			for downloadRequest := range carChan {
-				s.handleDownloadRequest(ctx, carChan, downloadRequest)
+				s.handleDownloadRequest(ctx, downloadRequest)
 			}
 			wg.Done()
 		}()

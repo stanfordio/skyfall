@@ -119,7 +119,7 @@ func (h *Hydrator) lookupProfileFromIdentity(identity *atpidentity.Identity) (pr
 	profile, err = bsky.ActorGetProfile(h.Context, h.Client, identity.Handle.String())
 
 	// Set the cache
-	if err != nil {
+	if err == nil {
 		h.Cache.SetWithTTL(key, profile, 1, time.Duration(1)*time.Hour*24)
 	}
 
