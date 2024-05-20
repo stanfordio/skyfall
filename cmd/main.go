@@ -357,6 +357,8 @@ func censusCmd(cctx *cli.Context) error {
 	cursor := ""
 
 	go func() {
+		defer cancel()
+
 		for {
 			out, err := comatproto.SyncListRepos(ctx, xrpcClient, cursor, 1000)
 			if err != nil {
