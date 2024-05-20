@@ -17,6 +17,7 @@ import (
 	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/ipfs/go-cid"
 	"github.com/stanfordio/skyfall/pkg/auth"
+	"github.com/stanfordio/skyfall/pkg/census"
 	"github.com/stanfordio/skyfall/pkg/hydrator"
 	"github.com/stanfordio/skyfall/pkg/output"
 	pull "github.com/stanfordio/skyfall/pkg/pull"
@@ -80,7 +81,7 @@ func run(args []string) {
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:  "pds-endpoint",
-						Usage: "PDS endpoint to pull from; if you use bsky's PDS 'aggregator', we find empirically you'll get most accounts",
+						Usage: "PDS endpoint to pull from; if you use bsky's PDS 'aggregator' (the default), we find empirically you'll get most (all?) accounts",
 						Value: "https://bsky.network",
 					},
 					&cli.StringFlag{
@@ -92,13 +93,23 @@ func run(args []string) {
 			},
 			{
 				Name:   "pull",
-				Usage:  "Pull all content and write it to a file or BigQuery; does not require any authentication!",
+				Usage:  "Pull all content and write it to a file or BigQuery",
 				Action: pullCmd,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:  "census-file",
-						Usage: "file with census data (see the `census` command); census data is a list of DIDs to pull, along with the status of whether they have been pulled",
+						Usage: "file with census data (see the `census` command); census data is a list of DIDs to pull; the command assumes that this list does not change in any way over the course of the pull",
 						Value: "census.jsonl",
+					},
+					&cli.StringFlag{
+						Name:  "intermediate-state",
+						Usage: "file to store intermediate state in (e.g., the last DID pulled)",
+						Value: "intermediate-state.json",
+					},
+					&cli.StringFlag{
+						Name:  "pds-endpoint",
+						Usage: "PDS endpoint to pull from",
+						Value: "https://bsky.network",
 					},
 					&cli.IntFlag{
 						Name:  "worker-count",
@@ -168,6 +179,15 @@ func run(args []string) {
 
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func waitOnSignals(ctx context.Context, signals chan os.Signal) {
+	select {
+	case <-signals:
+		log.Infof("Shutting down on signal")
+	case <-ctx.Done():
+		log.Infof("Shutting down on context done")
 	}
 }
 
@@ -293,14 +313,7 @@ func streamCmd(cctx *cli.Context) error {
 		log.Infof("Autorestart is enabled! Stream will restart if it dies...")
 	}
 
-	select {
-	case <-signals:
-		cancel()
-		log.Infof("Shutting down on signal")
-	case <-ctx.Done():
-		log.Infof("Shutting down on context done")
-	}
-
+	waitOnSignals(ctx, signals)
 	return nil
 }
 
@@ -343,42 +356,42 @@ func censusCmd(cctx *cli.Context) error {
 
 	cursor := ""
 
-	for {
-		out, err := comatproto.SyncListRepos(ctx, xrpcClient, cursor, 1000)
-		if err != nil {
-			log.Errorf("Failed to get list of repos: %v", err)
-			return err
-		} else {
-			log.Infof("Got %d repos from %s (cursor = %s)", len(out.Repos), pdsEndpoint, cursor)
-		}
-
-		if len(out.Repos) == 0 {
-			log.Infof("Finished pulling DIDs from: %s", pdsEndpoint)
-			break
-		}
-		cursor = *out.Cursor
-
-		for _, r := range out.Repos {
-			// Write the repo information to the output file
-			data := map[string]interface{}{
-				"did":     r.Did,
-				"head":    r.Head,
-				"rev":     r.Rev,
-				"_pulled": false,
-			}
-
-			// Marshall + write to file, with newline
-			marshalled, err := json.Marshal(data)
+	go func() {
+		for {
+			out, err := comatproto.SyncListRepos(ctx, xrpcClient, cursor, 1000)
 			if err != nil {
-				// If this fails, uh, what? How could this fail? Must be a
-				// cosmic ray or something.
-				log.Errorf("Failed to marshal data: %+v", err)
-				return err
+				log.Fatalf("Failed to get list of repos: %v", err)
+			} else {
+				log.Infof("Got %d repos from %s (cursor = %s)", len(out.Repos), pdsEndpoint, cursor)
 			}
-			outputFile.Write(append(marshalled, '\n'))
-		}
-	}
 
+			if len(out.Repos) == 0 {
+				log.Infof("Finished pulling DIDs from: %s", pdsEndpoint)
+				break
+			}
+			cursor = *out.Cursor
+
+			for _, r := range out.Repos {
+				// Write the repo information to the output file
+				data := census.CensusFileEntry{
+					Did:  r.Did,
+					Rev:  r.Rev,
+					Head: r.Head,
+				}
+
+				// Marshall + write to file, with newline
+				marshalled, err := json.Marshal(data)
+				if err != nil {
+					// If this fails, uh, what? How could this fail? Must be a
+					// cosmic ray or something.
+					log.Fatalf("Failed to marshal data: %+v", err)
+				}
+				outputFile.Write(append(marshalled, '\n'))
+			}
+		}
+	}()
+
+	waitOnSignals(ctx, signals)
 	return nil
 }
 
@@ -409,10 +422,14 @@ func pullCmd(cctx *cli.Context) error {
 
 	// Create a client
 	client := &pull.Pull{
-		PdsCursor:             "",
-		IntermediateStatePath: cctx.String("intermediate-state"),
-		Output:                outputChannel,
-		Hydrator:              hydrator,
+		CensusPath:                  cctx.String("census-file"),
+		IntermediateStatePath:       cctx.String("intermediate-state"),
+		PdsEndpoint:                 cctx.String("pds-endpoint"),
+		Output:                      outputChannel,
+		Hydrator:                    hydrator,
+		FirstUnpulledDidIndex:       0,
+		RecentlyPulledCensusIndices: make([]uint64, 10000),      // 10k should be enough, since we can always resize
+		CompletedIndicesChannel:     make(chan uint64, 100_000), // 100k should be enough
 	}
 
 	// Setup the output
@@ -439,14 +456,7 @@ func pullCmd(cctx *cli.Context) error {
 	// Start the output stream
 	go output.StreamOutput(ctx)
 
-	select {
-	case <-signals:
-		cancel()
-		log.Infof("Shutting down on signal")
-	case <-ctx.Done():
-		log.Infof("Shutting down on context done")
-	}
-
+	waitOnSignals(ctx, signals)
 	return nil
 }
 
@@ -564,13 +574,6 @@ func hydrateCmd(cctx *cli.Context) error {
 
 	go output.StreamOutput(ctx)
 
-	select {
-	case <-signals:
-		cancel()
-		log.Infof("Shutting down on signal")
-	case <-ctx.Done():
-		log.Infof("Shutting down on context done")
-	}
-
+	waitOnSignals(ctx, signals)
 	return nil
 }

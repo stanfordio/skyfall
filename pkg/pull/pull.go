@@ -1,36 +1,41 @@
 package pull
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"os"
+	"sort"
 	"sync"
 
-	comatproto "github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/repo"
-	"github.com/bluesky-social/indigo/xrpc"
 	"github.com/ipfs/go-cid"
 	log "github.com/sirupsen/logrus"
+	"github.com/stanfordio/skyfall/pkg/census"
 	"github.com/stanfordio/skyfall/pkg/hydrator"
-	"github.com/stanfordio/skyfall/pkg/utils"
 	// "github.com/bluesky-social/indigo/api/bsky"
 )
 
 type intermediateState struct {
-	PdsCursor string
+	FirstUnpulledDidIndex uint64 // All DIDs up to this one have been pulled, 1-indexed
 }
 
 type Pull struct {
-	PdsCursor             string
-	IntermediateStatePath string
-	Output                chan map[string]interface{}
-	Hydrator              *hydrator.Hydrator
+	CensusPath                  string
+	IntermediateStatePath       string
+	Output                      chan map[string]interface{}
+	Hydrator                    *hydrator.Hydrator
+	PdsEndpoint                 string
+	FirstUnpulledDidIndex       uint64   // 1-indexed, initialize to 0 by default
+	RecentlyPulledCensusIndices []uint64 // initialize to empty slice by default
+	CompletedIndicesChannel     chan uint64
 }
 
 type carPullRequest struct {
-	pdsEndpoint string
-	did         string
+	pdsEndpoint     string
+	did             string
+	censusFileIndex uint64 // Given Bluesky's current size, this would overflow if we used uint32
 }
 
 func (s *Pull) startDownloader(ctx context.Context, numWorkers int, carChan chan *carPullRequest, wg *sync.WaitGroup) {
@@ -77,6 +82,10 @@ func (s *Pull) startDownloader(ctx context.Context, numWorkers int, carChan chan
 
 					return nil
 				})
+
+				// Notify the state management goroutine that we've pulled this DID
+				s.CompletedIndicesChannel <- downloadRequest.censusFileIndex
+
 				if err != nil {
 					log.Errorf("Failed to hydrate car %s from %s: %v", downloadRequest.did, downloadRequest.pdsEndpoint, err)
 					continue
@@ -92,7 +101,7 @@ func (s *Pull) saveIntermediateStateToDisk() error {
 	// resume the download later if needed.
 
 	state := intermediateState{
-		PdsCursor: s.PdsCursor,
+		FirstUnpulledDidIndex: s.FirstUnpulledDidIndex,
 	}
 
 	// Marshall into json
@@ -122,7 +131,7 @@ func (s *Pull) loadIntermediateStateFromDisk() error {
 
 		// Unmarshall the json
 		state := intermediateState{
-			PdsCursor: s.PdsCursor,
+			FirstUnpulledDidIndex: s.FirstUnpulledDidIndex,
 		}
 		err = json.Unmarshal(in, &state)
 
@@ -130,62 +139,90 @@ func (s *Pull) loadIntermediateStateFromDisk() error {
 			return err
 		}
 
-		s.PdsCursor = state.PdsCursor
+		s.FirstUnpulledDidIndex = state.FirstUnpulledDidIndex
 	}
 
 	return nil
+}
+
+func (s *Pull) keepIntermediateStateUpdated() {
+	for completedIndex := range s.CompletedIndicesChannel {
+		// Add the completed index to the list of completed indices
+		s.RecentlyPulledCensusIndices = append(s.RecentlyPulledCensusIndices, completedIndex)
+
+		// Sort the list of completed indices
+		sort.Slice(s.RecentlyPulledCensusIndices, func(i, j int) bool {
+			return s.RecentlyPulledCensusIndices[i] < s.RecentlyPulledCensusIndices[j]
+		})
+
+		// While the first element in the list is the next one in the sequence,
+		// increment the first element and remove it from the list
+		for len(s.RecentlyPulledCensusIndices) > 0 && s.RecentlyPulledCensusIndices[0] <= s.FirstUnpulledDidIndex {
+			s.FirstUnpulledDidIndex = s.RecentlyPulledCensusIndices[0] + 1
+			s.RecentlyPulledCensusIndices = s.RecentlyPulledCensusIndices[1:]
+		}
+
+		// Save the state to disk
+		err := s.saveIntermediateStateToDisk()
+		if err != nil {
+			log.Fatalf("Failed to save intermediate state to disk: %v", err)
+		}
+	}
 }
 
 func (s *Pull) BeginDownloading(ctx context.Context, numWorkers int) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	err := s.loadIntermediateStateFromDisk()
+	if err != nil {
+		log.Errorf("Failed to load intermediate state from disk: %v", err)
+		return err
+	}
+
 	// Start the downloader
 	carDownloadChannel := make(chan *carPullRequest, 10000)
 	var wg sync.WaitGroup
 	go s.startDownloader(ctx, numWorkers, carDownloadChannel, &wg)
 
-	err := s.loadIntermediateStateFromDisk()
+	// Start the intermediate state manager
+	go s.keepIntermediateStateUpdated()
+
+	// Open the census file
+	censusFile, err := os.Open(s.CensusPath)
 	if err != nil {
-		log.Errorf("Failed to load intermediate state from disk, so will not be resuming from previous pull: %v", err)
-	} else {
-		log.Infof("Loaded intermediate state from disk; cursor = %s", s.PdsCursor)
+		log.Errorf("Failed to open census file: %v", err)
+		return err
 	}
-
-	pdsEndpoint := "https://bsky.network"
-
-	xrpcClient := &xrpc.Client{
-		Client: utils.RetryingHTTPClient(),
-		Host:   pdsEndpoint,
-	}
+	censusFileScanner := bufio.NewScanner(censusFile)
 
 	// Create the channel and add it to the downloaders
-	for {
-		s.Hydrator.Ratelimit.Take()
-		out, err := comatproto.SyncListRepos(ctx, xrpcClient, s.PdsCursor, 1000)
-		if err != nil {
-			log.Errorf("Failed to get list of repos: %v", err)
-			return err
-		} else {
-			log.Infof("Got %d repos from %s (cursor = %s)", len(out.Repos), pdsEndpoint, s.PdsCursor)
+	index := uint64(1)
+	for censusFileScanner.Scan() {
+		line := censusFileScanner.Text()
+
+		lineIndex := index
+		index++
+
+		// First, check if we've already pulled this DID
+		if index < s.FirstUnpulledDidIndex {
+			// Skip this DID
+			continue
 		}
-		if len(out.Repos) == 0 {
-			log.Infof("Finished pulling DIDs from: %s", pdsEndpoint)
-			break
-		}
-		s.PdsCursor = *out.Cursor
+
+		// Unmarshal the line
+		var repoInfo census.CensusFileEntry
+		err := json.Unmarshal([]byte(line), &repoInfo)
 		if err != nil {
-			log.Errorf("Failed to save intermediate state to disk: %v", err)
+			log.Infof("Failed to decode census file line : %v", err)
 			return err
 		}
 
 		// Go through and pull each repo
-		for _, r := range out.Repos {
-			log.Infof("Pulling CAR from %s: %s", pdsEndpoint, r.Did)
-			carDownloadChannel <- &carPullRequest{
-				pdsEndpoint: pdsEndpoint,
-				did:         r.Did,
-			}
+		carDownloadChannel <- &carPullRequest{
+			pdsEndpoint:     s.PdsEndpoint,
+			did:             repoInfo.Did,
+			censusFileIndex: lineIndex, // 1-indexed
 		}
 
 		err = s.saveIntermediateStateToDisk()
@@ -196,9 +233,9 @@ func (s *Pull) BeginDownloading(ctx context.Context, numWorkers int) error {
 
 	// Wait for the downloaders to finish on this PDS before moving on
 	// to the next one
-	log.Infof("Waiting for downloaders to finish on %s", pdsEndpoint)
+	log.Infof("Waiting for downloaders to finish on %s", s.PdsEndpoint)
 	wg.Wait()
-	log.Infof("Downloaders finished on %s", pdsEndpoint)
+	log.Infof("Downloaders finished on %s", s.PdsEndpoint)
 
 	// Close the output channel
 	close(s.Output)
