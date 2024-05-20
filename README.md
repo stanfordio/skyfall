@@ -65,6 +65,21 @@ go run cmd/main.go --handle <handle> --password <password> stream --output-file 
 go run cmd/main.go --handle <handle> --password <password> stream --output-bq-table dgap_bsky.example_table
 ```
 
+### Take a "census" (i.e., get all DIDs)
+
+```
+NAME:
+   skyfall census - Pull all DIDs from the network, likely so that you can later pull them; does not require any authentication!
+
+USAGE:
+   skyfall census [command options] [arguments...]
+
+OPTIONS:
+   --pds-endpoint value  PDS endpoint to pull from; if you use bsky's PDS 'aggregator' (the default), we find empirically you'll get most (all?) accounts (default: "https://bsky.network")
+   --output-file value   file to write output to (default: "census.jsonl")
+   --help, -h            show help
+```
+
 ### Pull everything (from Bluesky)
 
 ```
@@ -75,7 +90,9 @@ USAGE:
    skyfall pull [command options] [arguments...]
 
 OPTIONS:
-   --intermediate-state value  file to intermediate state to (important for resumption) (default: "pull-intermediate-state.json")
+   --census-file census        file with census data (see the census command); census data is a list of DIDs to pull; the command assumes that this list does not change in any way over the course of the pull (default: "census.jsonl")
+   --intermediate-state value  file to store intermediate state in (e.g., the last DID pulled) (default: "intermediate-state.json")
+   --pds-endpoint value        PDS endpoint to pull from (default: "https://bsky.network")
    --worker-count value        number of workers to scale to (default: 32)
    --output-file value         file to write output to (if specified, will attempt to backfill from the most recent event in the file) (default: "output.jsonl")
    --stringify-full            whether to stringify the full event in file output (if true, the JSON will be stringified; this is helpful when you want output to match what would be sent to BigQuery) (default: false)
@@ -83,9 +100,9 @@ OPTIONS:
    --help, -h                  show help
 ```
 
-This command will iterate through all the repos available on the main Bluesky network, iterate through all the records in each repo, hydrate each record, and output the records to a file or BigQuery.
+This command will iterate through all the repos listed in the provided census file, iterate through all the records in each repo, hydrate each record, and output the records to a file or BigQuery.
 
-Note that because this command may take a long time to run, it will save intermediate state to a file. If you want to resume the pull, you can pass the `--intermediate-state` flag with the path to the intermediate state file. The pull will resume from where it left off, but note that there is no guarantee that the cursor is "stable" across long pauses. There may be small gaps or overlaps in the data.
+Note that because this command may take a long time to run, it will save intermediate state to a file. If you want to resume the pull, you can pass the `--intermediate-state` flag with the path to the intermediate state file. The pull will resume from where it left off.
 
 Example usage:
 
