@@ -246,7 +246,7 @@ MainLoop:
 			preparedValue, err := prepareForWrite(value)
 			if err != nil {
 				log.Errorf("Failed to prepare value for writing: %+v", err)
-				return err
+				continue
 			}
 			preparedValues = append(preparedValues, preparedValue)
 		}
@@ -255,7 +255,6 @@ MainLoop:
 		// semantic batch)
 		if err := inserter.Put(ctx, preparedValues); err != nil {
 			log.Errorf("Failed to write output: %+v", err)
-			return err
 		}
 		log.Infof("Wrote %d rows to BigQuery", len(values))
 	}
