@@ -175,39 +175,85 @@ func (mvs MapValueSaver) Save() (row map[string]bigquery.Value, insertID string,
 	return row, insertID, nil
 }
 
+func prepareForWrite(value map[string]interface{}) (out *MapValueSaver, err error) {
+	// Set "Full" to the JSON representation of "Full"
+	fullMarshalled, err := json.Marshal(value["Full"])
+	if err != nil {
+		log.Errorf("Failed to marshal event: %+v", err)
+		return nil, err
+	}
+	value["Full"] = string(fullMarshalled)
+
+	cleaned := cleanOutput(value)
+
+	// Insert the "_Raw" field as a string
+	json, err := json.Marshal(cleaned)
+	if err != nil {
+		log.Errorf("Failed to marshal event: %+v", err)
+		return nil, err
+	}
+
+	cleaned["_Raw"] = string(json)
+
+	mvs := MapValueSaver{Data: cleaned} // Heap allocated, thanks Go.
+
+	return &mvs, nil
+}
+
 func (bq BQ) StreamOutput(ctx context.Context) error {
 	log.Infof("Streaming output to BigQuery table: %+v", bq.OutputTable.FullyQualifiedName())
 
 	_, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	inserter := bq.OutputTable.Inserter()
 	inserter.IgnoreUnknownValues = true
 
+MainLoop:
 	for {
-		e := <-bq.OutputChannel
+		var values []map[string]interface{}
 
-		// Set "Full" to the JSON representation of "Full"
-		fullMarshalled, err := json.Marshal(e["Full"])
-		if err != nil {
-			log.Errorf("Failed to marshal event: %+v", err)
-			cancel()
+		// Wait for at least one value in the channel
+		value, ok := <-bq.OutputChannel
+		if !ok {
+			break MainLoop // Channel is closed
 		}
-		e["Full"] = string(fullMarshalled)
+		values = append(values, value)
 
-		cleaned := cleanOutput(e)
+		// Collect remaining values from the channel until it is empty
+	ChannelCollector:
+		for {
+			select {
+			case value, ok := <-bq.OutputChannel:
+				if !ok {
+					break MainLoop // Channel is closed
+				}
 
-		// Insert the "_Raw" field as a string
-		json, err := json.Marshal(cleaned)
-		if err != nil {
-			log.Errorf("Failed to marshal event: %+v", err)
-			cancel()
+				values = append(values, value)
+			default:
+				break ChannelCollector // Channel is empty
+			}
 		}
 
-		cleaned["_Raw"] = string(json)
+		// Prepare the values for writing
+		var preparedValues []*MapValueSaver
+		for _, value := range values {
+			preparedValue, err := prepareForWrite(value)
+			if err != nil {
+				log.Errorf("Failed to prepare value for writing: %+v", err)
+				return err
+			}
+			preparedValues = append(preparedValues, preparedValue)
+		}
 
-		mvs := MapValueSaver{Data: cleaned}
-		if err := inserter.Put(ctx, mvs); err != nil {
+		// Do the write in a batch (not a BigQuery *batch*, just, like, a
+		// semantic batch)
+		if err := inserter.Put(ctx, preparedValues); err != nil {
 			log.Errorf("Failed to write output: %+v", err)
-			cancel()
+			return err
 		}
+		log.Infof("Wrote %d rows to BigQuery", len(values))
 	}
+
+	return nil
 }
