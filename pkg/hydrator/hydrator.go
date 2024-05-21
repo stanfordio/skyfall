@@ -42,7 +42,11 @@ func MakeHydrator(ctx context.Context, cacheSize int64, authInfo *xrpc.AuthInfo)
 		BufferItems: 64, // number of keys per Get buffer
 		Cost: func(value interface{}) int64 {
 			// Return the size in bytes of the value
-			return int64(len(value.([]byte)))
+			bytes, err := json.Marshal(value)
+			if err != nil {
+				log.Fatalf("Failed to marshal value to calculate cache cost: %s", err)
+			}
+			return int64(len(bytes)) // Approximate size in bytes
 		},
 	})
 
@@ -95,7 +99,7 @@ func (h *Hydrator) LookupIdentity(identifier string) (identity *atpidentity.Iden
 		return
 	}
 
-	h.Cache.SetWithTTL(key, identity, 1, time.Duration(1)*time.Hour*24)
+	h.Cache.SetWithTTL(key, identity, 0, time.Duration(1)*time.Hour*24)
 
 	return
 }
@@ -120,7 +124,7 @@ func (h *Hydrator) lookupProfileFromIdentity(identity *atpidentity.Identity) (pr
 
 	// Set the cache
 	if err == nil {
-		h.Cache.SetWithTTL(key, profile, 1, time.Duration(1)*time.Hour*24)
+		h.Cache.SetWithTTL(key, profile, 0, time.Duration(1)*time.Hour*24)
 	}
 
 	return
@@ -161,7 +165,7 @@ func (h *Hydrator) lookupPost(atUrl string) (post *bsky.FeedDefs_PostView, err e
 
 	post = output.Posts[0]
 
-	h.Cache.SetWithTTL(key, post, 1, time.Duration(1)*time.Hour*24)
+	h.Cache.SetWithTTL(key, post, 0, time.Duration(1)*time.Hour*24)
 
 	return
 }
@@ -364,7 +368,7 @@ func (h *Hydrator) GetRepoBytes(actorDid string, pdsEndpoint string) ([]byte, er
 	}
 
 	// Set the cache
-	h.Cache.SetWithTTL(key, repoBytes, 1, time.Duration(1)*time.Hour*24)
+	h.Cache.SetWithTTL(key, repoBytes, 0, time.Duration(1)*time.Hour*24)
 
 	return repoBytes, nil
 
