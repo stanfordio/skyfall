@@ -27,7 +27,7 @@ func MakeAuthenticator(ctx context.Context) (*Authenticator, error) {
 			Client: utils.RetryingHTTPClient(),
 		},
 		RefreshTokenClient: &xrpc.Client{
-			Client: utils.RetryingHTTPClient(),
+			Client: utils.RetryingHTTPClientExcept429(),
 		},
 	}
 
@@ -108,7 +108,8 @@ func (a *Authenticator) refreshTokenContinuously(authInfo *xrpc.AuthInfo) {
 		out, error := atproto.ServerRefreshSession(a.Context, a.RefreshTokenClient)
 
 		if error != nil {
-			log.Errorf("Error refreshing token: %+v; this is typically catastrophic, but I'll keep trying...", error)
+			log.Errorf("Error refreshing token: %+v; this is typically catastrophic, but I'll try again in 15 seconds...", error)
+			time.Sleep(15 * time.Second)
 			continue
 		} else {
 			log.Debugf("Successfully refreshed access token")

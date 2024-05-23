@@ -59,6 +59,18 @@ func RetryingHTTPClient() *http.Client {
 	return client
 }
 
+func RetryingHTTPClientExcept429() *http.Client {
+	retryClient := retryablehttp.NewClient()
+	retryClient.RetryMax = 15
+	retryClient.RetryWaitMin = 1 * time.Second
+	retryClient.RetryWaitMax = 15 * time.Minute
+	retryClient.CheckRetry = XRPCRetryPolicyExcept429
+	client := retryClient.StandardClient()
+	client.Timeout = 30 * time.Second
+
+	return client
+}
+
 func XRPCRetryPolicy(ctx context.Context, resp *http.Response, err error) (bool, error) {
 	// Do not retry network errors, since these are usually because the PDS is dead
 	if err != nil {
@@ -69,4 +81,13 @@ func XRPCRetryPolicy(ctx context.Context, resp *http.Response, err error) (bool,
 	}
 
 	return retryablehttp.DefaultRetryPolicy(ctx, resp, err)
+}
+
+func XRPCRetryPolicyExcept429(ctx context.Context, resp *http.Response, err error) (bool, error) {
+	// Do not retry 429s
+	if resp != nil && resp.StatusCode == 429 {
+		return false, nil
+	}
+
+	return XRPCRetryPolicy(ctx, resp, err)
 }
