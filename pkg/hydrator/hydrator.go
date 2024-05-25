@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/DmitriyVTitov/size"
 	"github.com/ipfs/go-cid"
 	log "github.com/sirupsen/logrus"
 	"github.com/stanfordio/skyfall/pkg/utils"
@@ -41,12 +42,8 @@ func MakeHydrator(ctx context.Context, cacheSize int64, authInfo *xrpc.AuthInfo)
 		MaxCost:     cacheSize,
 		BufferItems: 64, // number of keys per Get buffer
 		Cost: func(value interface{}) int64 {
-			// Return the size in bytes of the value
-			bytes, err := json.Marshal(value)
-			if err != nil {
-				log.Fatalf("Failed to marshal value to calculate cache cost: %s", err)
-			}
-			return int64(len(bytes)) // Approximate size in bytes
+			val := int64(size.Of(value))
+			return val
 		},
 	})
 

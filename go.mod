@@ -25,6 +25,7 @@ require (
 	cloud.google.com/go/compute v1.25.1 // indirect
 	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	cloud.google.com/go/iam v1.1.7 // indirect
+	github.com/DmitriyVTitov/size v1.5.0 // indirect
 	github.com/RussellLuo/slidingwindow v0.0.0-20200528002341-535bb99d338b // indirect
 	github.com/apache/arrow/go/v14 v14.0.2 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
