@@ -314,6 +314,11 @@ func GetSchema() bigquery.Schema {
             },
             {
               "mode": "NULLABLE",
+              "name": "ReplyCount",
+              "type": "INTEGER"
+            },
+            {
+              "mode": "NULLABLE",
               "name": "RepostCount",
               "type": "INTEGER"
             },
@@ -658,6 +663,11 @@ func GetSchema() bigquery.Schema {
             {
               "mode": "NULLABLE",
               "name": "RepostCount",
+              "type": "INTEGER"
+            },
+            {
+              "mode": "NULLABLE",
+              "name": "ReplyCount",
               "type": "INTEGER"
             },
             {

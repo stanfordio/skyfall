@@ -247,6 +247,7 @@ func (h *Hydrator) flattenPostView(post *bsky.FeedDefs_PostView) (result map[str
 	result["CID"] = post.Cid
 	result["LikeCount"] = post.LikeCount
 	result["RepostCount"] = post.RepostCount
+	result["ReplyCount"] = post.ReplyCount
 	result["LikeCount"] = post.LikeCount
 	result["URI"] = post.Uri
 
