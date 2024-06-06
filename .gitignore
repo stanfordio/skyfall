@@ -24,3 +24,5 @@ pull-intermediate-state.json
 
 # Go workspace file
 go.work
+# Executable
+main
