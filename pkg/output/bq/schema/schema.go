@@ -78,6 +78,11 @@ func GetSchema() bigquery.Schema {
             },
             {
               "mode": "NULLABLE",
+              "name": "IndexedAt",
+              "type": "TIMESTAMP"
+            },
+            {
+              "mode": "NULLABLE",
               "name": "FollowersCount",
               "type": "INTEGER"
             },
@@ -122,6 +127,11 @@ func GetSchema() bigquery.Schema {
               "mode": "NULLABLE",
               "name": "DisplayName",
               "type": "STRING"
+            },
+            {
+              "mode": "NULLABLE",
+              "name": "IndexedAt",
+              "type": "TIMESTAMP"
             },
             {
               "mode": "NULLABLE",

@@ -228,6 +228,7 @@ func (h *Hydrator) flattenFullProfile(profile *bsky.ActorDefs_ProfileViewDetaile
 	result["FollowersCount"] = profile.FollowersCount
 	result["FollowsCount"] = profile.FollowsCount
 	result["PostsCount"] = profile.PostsCount
+	result["IndexedAt"] = profile.IndexedAt
 
 	return
 }
