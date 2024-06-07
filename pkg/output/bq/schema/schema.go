@@ -7,714 +7,593 @@ import (
 )
 
 func GetSchema() bigquery.Schema {
-	// Generate this automatically from exported files using https://pypi.org/project/bigquery-schema-generator/
+	// Generated automatically from exported files using https://pypi.org/project/bigquery-schema-generator/
 	// E.g., generate-schema < file.data.json
+	// Note for updates you need exact raw schema from bq show --schema
 	rawSchema := `[
-    {
-      "mode": "NULLABLE",
-      "name": "Action",
-      "type": "STRING"
-    },
-    {
-      "mode": "NULLABLE",
-      "name": "CreatedAt",
-      "type": "TIMESTAMP"
-    },
-    {
-      "mode": "NULLABLE",
-      "name": "Full",
-      "type": "STRING"
-    },
-    {
-      "fields": [
-        {
-          "fields": [
-            {
-              "mode": "NULLABLE",
-              "name": "DID",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "DIDKey",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "Handle",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "PDS",
-              "type": "STRING"
-            }
-          ],
-          "mode": "NULLABLE",
-          "name": "Actor",
-          "type": "RECORD"
-        },
-        {
-          "fields": [
-            {
-              "mode": "NULLABLE",
-              "name": "Avatar",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "Description",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "DID",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "DisplayName",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "IndexedAt",
-              "type": "TIMESTAMP"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "FollowersCount",
-              "type": "INTEGER"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "FollowsCount",
-              "type": "INTEGER"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "Handle",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "PostsCount",
-              "type": "INTEGER"
-            }
-          ],
-          "mode": "NULLABLE",
-          "name": "BlockedProfile",
-          "type": "RECORD"
-        },
-        {
-          "fields": [
-            {
-              "mode": "NULLABLE",
-              "name": "Avatar",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "Description",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "DID",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "DisplayName",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "IndexedAt",
-              "type": "TIMESTAMP"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "FollowersCount",
-              "type": "INTEGER"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "FollowsCount",
-              "type": "INTEGER"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "Handle",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "PostsCount",
-              "type": "INTEGER"
-            }
-          ],
-          "mode": "NULLABLE",
-          "name": "FollowedProfile",
-          "type": "RECORD"
-        },
-        {
-          "fields": [
-            {
-              "fields": [
-                {
-                  "mode": "NULLABLE",
-                  "name": "Avatar",
-                  "type": "STRING"
-                },
-                {
-                  "mode": "NULLABLE",
-                  "name": "DID",
-                  "type": "STRING"
-                },
-                {
-                  "mode": "NULLABLE",
-                  "name": "DisplayName",
-                  "type": "STRING"
-                },
-                {
-                  "mode": "NULLABLE",
-                  "name": "Handle",
-                  "type": "STRING"
-                }
-              ],
-              "mode": "NULLABLE",
-              "name": "Author",
-              "type": "RECORD"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "CID",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "CreatedAt",
-              "type": "TIMESTAMP"
-            },
-            {
-              "fields": [
-                {
-                  "fields": [
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Alt",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "BlobLink",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Height",
-                      "type": "INTEGER"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "MimeType",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Width",
-                      "type": "INTEGER"
-                    }
-                  ],
-                  "mode": "REPEATED",
-                  "name": "EmbedRecordMedia",
-                  "type": "RECORD"
-                },
-                {
-                  "fields": [
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Description",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Title",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "URI",
-                      "type": "STRING"
-                    }
-                  ],
-                  "mode": "NULLABLE",
-                  "name": "External",
-                  "type": "RECORD"
-                },
-                {
-                  "fields": [
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Alt",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "BlobLink",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Height",
-                      "type": "INTEGER"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "MimeType",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Width",
-                      "type": "INTEGER"
-                    }
-                  ],
-                  "mode": "REPEATED",
-                  "name": "Images",
-                  "type": "RECORD"
-                },
-                {
-                  "fields": [
-                    {
-                      "mode": "NULLABLE",
-                      "name": "CID",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Type",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "URI",
-                      "type": "STRING"
-                    }
-                  ],
-                  "mode": "NULLABLE",
-                  "name": "Record",
-                  "type": "RECORD"
-                }
-              ],
-              "mode": "NULLABLE",
-              "name": "Embed",
-              "type": "RECORD"
-            },
-            {
-              "mode": "REPEATED",
-              "name": "Langs",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "LikeCount",
-              "type": "INTEGER"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "ReplyCount",
-              "type": "INTEGER"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "RepostCount",
-              "type": "INTEGER"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "Text",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "URI",
-              "type": "STRING"
-            }
-          ],
-          "mode": "NULLABLE",
-          "name": "LikedPost",
-          "type": "RECORD"
-        },
-        {
-          "fields": [
-            {
-              "mode": "NULLABLE",
-              "name": "CreatedAt",
-              "type": "TIMESTAMP"
-            },
-            {
-              "fields": [
-                {
-                  "fields": [
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Alt",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "BlobLink",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Height",
-                      "type": "INTEGER"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "MimeType",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Width",
-                      "type": "INTEGER"
-                    }
-                  ],
-                  "mode": "REPEATED",
-                  "name": "EmbedRecordMedia",
-                  "type": "RECORD"
-                },
-                {
-                  "fields": [
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Description",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Title",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "URI",
-                      "type": "STRING"
-                    }
-                  ],
-                  "mode": "NULLABLE",
-                  "name": "External",
-                  "type": "RECORD"
-                },
-                {
-                  "fields": [
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Alt",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "BlobLink",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Height",
-                      "type": "INTEGER"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "MimeType",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Width",
-                      "type": "INTEGER"
-                    }
-                  ],
-                  "mode": "REPEATED",
-                  "name": "Images",
-                  "type": "RECORD"
-                },
-                {
-                  "fields": [
-                    {
-                      "mode": "NULLABLE",
-                      "name": "CID",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Type",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "URI",
-                      "type": "STRING"
-                    }
-                  ],
-                  "mode": "NULLABLE",
-                  "name": "Record",
-                  "type": "RECORD"
-                }
-              ],
-              "mode": "NULLABLE",
-              "name": "Embed",
-              "type": "RECORD"
-            },
-            {
-              "mode": "REPEATED",
-              "name": "Langs",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "ReplyParentCID",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "Text",
-              "type": "STRING"
-            }
-          ],
-          "mode": "NULLABLE",
-          "name": "Post",
-          "type": "RECORD"
-        },
-        {
-          "fields": [
-            {
-              "mode": "NULLABLE",
-              "name": "Description",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "DisplayName",
-              "type": "STRING"
-            }
-          ],
-          "mode": "NULLABLE",
-          "name": "Profile",
-          "type": "RECORD"
-        },
-        {
-          "fields": [
-            {
-              "fields": [
-                {
-                  "mode": "NULLABLE",
-                  "name": "Avatar",
-                  "type": "STRING"
-                },
-                {
-                  "mode": "NULLABLE",
-                  "name": "DID",
-                  "type": "STRING"
-                },
-                {
-                  "mode": "NULLABLE",
-                  "name": "DisplayName",
-                  "type": "STRING"
-                },
-                {
-                  "mode": "NULLABLE",
-                  "name": "Handle",
-                  "type": "STRING"
-                }
-              ],
-              "mode": "NULLABLE",
-              "name": "Author",
-              "type": "RECORD"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "CID",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "CreatedAt",
-              "type": "TIMESTAMP"
-            },
-            {
-              "fields": [
-                {
-                  "fields": [
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Alt",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "BlobLink",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Height",
-                      "type": "INTEGER"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "MimeType",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Width",
-                      "type": "INTEGER"
-                    }
-                  ],
-                  "mode": "REPEATED",
-                  "name": "EmbedRecordMedia",
-                  "type": "RECORD"
-                },
-                {
-                  "fields": [
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Description",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Title",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "URI",
-                      "type": "STRING"
-                    }
-                  ],
-                  "mode": "NULLABLE",
-                  "name": "External",
-                  "type": "RECORD"
-                },
-                {
-                  "fields": [
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Alt",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "BlobLink",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Height",
-                      "type": "INTEGER"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "MimeType",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Width",
-                      "type": "INTEGER"
-                    }
-                  ],
-                  "mode": "REPEATED",
-                  "name": "Images",
-                  "type": "RECORD"
-                },
-                {
-                  "fields": [
-                    {
-                      "mode": "NULLABLE",
-                      "name": "CID",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "Type",
-                      "type": "STRING"
-                    },
-                    {
-                      "mode": "NULLABLE",
-                      "name": "URI",
-                      "type": "STRING"
-                    }
-                  ],
-                  "mode": "NULLABLE",
-                  "name": "Record",
-                  "type": "RECORD"
-                }
-              ],
-              "mode": "NULLABLE",
-              "name": "Embed",
-              "type": "RECORD"
-            },
-            {
-              "mode": "REPEATED",
-              "name": "Langs",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "LikeCount",
-              "type": "INTEGER"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "RepostCount",
-              "type": "INTEGER"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "ReplyCount",
-              "type": "INTEGER"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "Text",
-              "type": "STRING"
-            },
-            {
-              "mode": "NULLABLE",
-              "name": "URI",
-              "type": "STRING"
-            }
-          ],
-          "mode": "NULLABLE",
-          "name": "RepostedPost",
-          "type": "RECORD"
-        }
-      ],
-      "mode": "NULLABLE",
-      "name": "Projection",
-      "type": "RECORD"
-    },
-    {
-      "mode": "NULLABLE",
-      "name": "PulledTimestamp",
-      "type": "TIMESTAMP"
-    },
-    {
-      "mode": "NULLABLE",
-      "name": "Seq",
-      "type": "INTEGER"
-    },
-    {
-      "mode": "NULLABLE",
-      "name": "Type",
-      "type": "STRING"
-    }
+	{
+		"name": "Action",
+		"type": "STRING"
+	},
+	{
+		"name": "CreatedAt",
+		"type": "TIMESTAMP"
+	},
+	{
+		"name": "Full",
+		"type": "STRING"
+	},
+	{
+		"fields": [
+		{
+			"fields": [
+			{
+				"name": "DID",
+				"type": "STRING"
+			},
+			{
+				"name": "DIDKey",
+				"type": "STRING"
+			},
+			{
+				"name": "Handle",
+				"type": "STRING"
+			},
+			{
+				"name": "PDS",
+				"type": "STRING"
+			}
+			],
+			"name": "Actor",
+			"type": "RECORD"
+		},
+		{
+			"fields": [
+			{
+				"name": "Avatar",
+				"type": "STRING"
+			},
+			{
+				"name": "Description",
+				"type": "STRING"
+			},
+			{
+				"name": "DID",
+				"type": "STRING"
+			},
+			{
+				"name": "DisplayName",
+				"type": "STRING"
+			},
+			{
+				"name": "FollowersCount",
+				"type": "INTEGER"
+			},
+			{
+				"name": "FollowsCount",
+				"type": "INTEGER"
+			},
+			{
+				"name": "Handle",
+				"type": "STRING"
+			},
+			{
+				"name": "PostsCount",
+				"type": "INTEGER"
+			},
+			{
+				"name": "IndexedAt",
+				"type": "TIMESTAMP"
+			}
+			],
+			"name": "BlockedProfile",
+			"type": "RECORD"
+		},
+		{
+			"fields": [
+			{
+				"name": "Avatar",
+				"type": "STRING"
+			},
+			{
+				"name": "Description",
+				"type": "STRING"
+			},
+			{
+				"name": "DID",
+				"type": "STRING"
+			},
+			{
+				"name": "DisplayName",
+				"type": "STRING"
+			},
+			{
+				"name": "FollowersCount",
+				"type": "INTEGER"
+			},
+			{
+				"name": "FollowsCount",
+				"type": "INTEGER"
+			},
+			{
+				"name": "Handle",
+				"type": "STRING"
+			},
+			{
+				"name": "PostsCount",
+				"type": "INTEGER"
+			},
+			{
+				"name": "IndexedAt",
+				"type": "TIMESTAMP"
+			}
+			],
+			"name": "FollowedProfile",
+			"type": "RECORD"
+		},
+		{
+			"fields": [
+			{
+				"fields": [
+				{
+					"name": "Avatar",
+					"type": "STRING"
+				},
+				{
+					"name": "DID",
+					"type": "STRING"
+				},
+				{
+					"name": "DisplayName",
+					"type": "STRING"
+				},
+				{
+					"name": "Handle",
+					"type": "STRING"
+				},
+				{
+					"name": "IndexedAt",
+					"type": "TIMESTAMP"
+				}
+				],
+				"name": "Author",
+				"type": "RECORD"
+			},
+			{
+				"name": "CID",
+				"type": "STRING"
+			},
+			{
+				"name": "CreatedAt",
+				"type": "TIMESTAMP"
+			},
+			{
+				"fields": [
+				{
+					"fields": [
+					{
+						"name": "Alt",
+						"type": "STRING"
+					},
+					{
+						"name": "BlobLink",
+						"type": "STRING"
+					},
+					{
+						"name": "Height",
+						"type": "INTEGER"
+					},
+					{
+						"name": "MimeType",
+						"type": "STRING"
+					},
+					{
+						"name": "Width",
+						"type": "INTEGER"
+					}
+					],
+					"mode": "REPEATED",
+					"name": "EmbedRecordMedia",
+					"type": "RECORD"
+				},
+				{
+					"fields": [
+					{
+						"name": "Description",
+						"type": "STRING"
+					},
+					{
+						"name": "Title",
+						"type": "STRING"
+					},
+					{
+						"name": "URI",
+						"type": "STRING"
+					}
+					],
+					"name": "External",
+					"type": "RECORD"
+				},
+				{
+					"fields": [
+					{
+						"name": "Alt",
+						"type": "STRING"
+					},
+					{
+						"name": "BlobLink",
+						"type": "STRING"
+					},
+					{
+						"name": "Height",
+						"type": "INTEGER"
+					},
+					{
+						"name": "MimeType",
+						"type": "STRING"
+					},
+					{
+						"name": "Width",
+						"type": "INTEGER"
+					}
+					],
+					"mode": "REPEATED",
+					"name": "Images",
+					"type": "RECORD"
+				},
+				{
+					"fields": [
+					{
+						"name": "CID",
+						"type": "STRING"
+					},
+					{
+						"name": "Type",
+						"type": "STRING"
+					},
+					{
+						"name": "URI",
+						"type": "STRING"
+					}
+					],
+					"name": "Record",
+					"type": "RECORD"
+				}
+				],
+				"name": "Embed",
+				"type": "RECORD"
+			},
+			{
+				"mode": "REPEATED",
+				"name": "Langs",
+				"type": "STRING"
+			},
+			{
+				"name": "LikeCount",
+				"type": "INTEGER"
+			},
+			{
+				"name": "RepostCount",
+				"type": "INTEGER"
+			},
+			{
+				"name": "Text",
+				"type": "STRING"
+			},
+			{
+				"name": "URI",
+				"type": "STRING"
+			}
+			],
+			"name": "LikedPost",
+			"type": "RECORD"
+		},
+		{
+			"fields": [
+			{
+				"name": "CreatedAt",
+				"type": "TIMESTAMP"
+			},
+			{
+				"fields": [
+				{
+					"fields": [
+					{
+						"name": "Alt",
+						"type": "STRING"
+					},
+					{
+						"name": "BlobLink",
+						"type": "STRING"
+					},
+					{
+						"name": "Height",
+						"type": "INTEGER"
+					},
+					{
+						"name": "MimeType",
+						"type": "STRING"
+					},
+					{
+						"name": "Width",
+						"type": "INTEGER"
+					}
+					],
+					"mode": "REPEATED",
+					"name": "EmbedRecordMedia",
+					"type": "RECORD"
+				},
+				{
+					"fields": [
+					{
+						"name": "Description",
+						"type": "STRING"
+					},
+					{
+						"name": "Title",
+						"type": "STRING"
+					},
+					{
+						"name": "URI",
+						"type": "STRING"
+					}
+					],
+					"name": "External",
+					"type": "RECORD"
+				},
+				{
+					"fields": [
+					{
+						"name": "Alt",
+						"type": "STRING"
+					},
+					{
+						"name": "BlobLink",
+						"type": "STRING"
+					},
+					{
+						"name": "Height",
+						"type": "INTEGER"
+					},
+					{
+						"name": "MimeType",
+						"type": "STRING"
+					},
+					{
+						"name": "Width",
+						"type": "INTEGER"
+					}
+					],
+					"mode": "REPEATED",
+					"name": "Images",
+					"type": "RECORD"
+				},
+				{
+					"fields": [
+					{
+						"name": "CID",
+						"type": "STRING"
+					},
+					{
+						"name": "Type",
+						"type": "STRING"
+					},
+					{
+						"name": "URI",
+						"type": "STRING"
+					}
+					],
+					"name": "Record",
+					"type": "RECORD"
+				}
+				],
+				"name": "Embed",
+				"type": "RECORD"
+			},
+			{
+				"mode": "REPEATED",
+				"name": "Langs",
+				"type": "STRING"
+			},
+			{
+				"name": "ReplyParentCID",
+				"type": "STRING"
+			},
+			{
+				"name": "Text",
+				"type": "STRING"
+			}
+			],
+			"name": "Post",
+			"type": "RECORD"
+		},
+		{
+			"fields": [
+			{
+				"name": "Description",
+				"type": "STRING"
+			},
+			{
+				"name": "DisplayName",
+				"type": "STRING"
+			}
+			],
+			"name": "Profile",
+			"type": "RECORD"
+		},
+		{
+			"fields": [
+			{
+				"fields": [
+				{
+					"name": "Avatar",
+					"type": "STRING"
+				},
+				{
+					"name": "DID",
+					"type": "STRING"
+				},
+				{
+					"name": "DisplayName",
+					"type": "STRING"
+				},
+				{
+					"name": "Handle",
+					"type": "STRING"
+				},
+				{
+					"name": "IndexedAt",
+					"type": "TIMESTAMP"
+				}
+				],
+				"name": "Author",
+				"type": "RECORD"
+			},
+			{
+				"name": "CID",
+				"type": "STRING"
+			},
+			{
+				"name": "CreatedAt",
+				"type": "TIMESTAMP"
+			},
+			{
+				"fields": [
+				{
+					"fields": [
+					{
+						"name": "Alt",
+						"type": "STRING"
+					},
+					{
+						"name": "BlobLink",
+						"type": "STRING"
+					},
+					{
+						"name": "Height",
+						"type": "INTEGER"
+					},
+					{
+						"name": "MimeType",
+						"type": "STRING"
+					},
+					{
+						"name": "Width",
+						"type": "INTEGER"
+					}
+					],
+					"mode": "REPEATED",
+					"name": "EmbedRecordMedia",
+					"type": "RECORD"
+				},
+				{
+					"fields": [
+					{
+						"name": "Description",
+						"type": "STRING"
+					},
+					{
+						"name": "Title",
+						"type": "STRING"
+					},
+					{
+						"name": "URI",
+						"type": "STRING"
+					}
+					],
+					"name": "External",
+					"type": "RECORD"
+				},
+				{
+					"fields": [
+					{
+						"name": "Alt",
+						"type": "STRING"
+					},
+					{
+						"name": "BlobLink",
+						"type": "STRING"
+					},
+					{
+						"name": "Height",
+						"type": "INTEGER"
+					},
+					{
+						"name": "MimeType",
+						"type": "STRING"
+					},
+					{
+						"name": "Width",
+						"type": "INTEGER"
+					}
+					],
+					"mode": "REPEATED",
+					"name": "Images",
+					"type": "RECORD"
+				},
+				{
+					"fields": [
+					{
+						"name": "CID",
+						"type": "STRING"
+					},
+					{
+						"name": "Type",
+						"type": "STRING"
+					},
+					{
+						"name": "URI",
+						"type": "STRING"
+					}
+					],
+					"name": "Record",
+					"type": "RECORD"
+				}
+				],
+				"name": "Embed",
+				"type": "RECORD"
+			},
+			{
+				"mode": "REPEATED",
+				"name": "Langs",
+				"type": "STRING"
+			},
+			{
+				"name": "LikeCount",
+				"type": "INTEGER"
+			},
+			{
+				"name": "RepostCount",
+				"type": "INTEGER"
+			},
+			{
+				"name": "Text",
+				"type": "STRING"
+			},
+			{
+				"name": "URI",
+				"type": "STRING"
+			}
+			],
+			"name": "RepostedPost",
+			"type": "RECORD"
+		}
+		],
+		"name": "Projection",
+		"type": "RECORD"
+	},
+	{
+		"name": "PulledTimestamp",
+		"type": "TIMESTAMP"
+	},
+	{
+		"name": "Seq",
+		"type": "INTEGER"
+	},
+	{
+		"name": "Type",
+		"type": "STRING"
+	}
   ]`
 
 	schema, error := bigquery.SchemaFromJSON([]byte(rawSchema))
