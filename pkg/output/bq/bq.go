@@ -74,6 +74,10 @@ func schemasAreEqual(schema1, schema2 bigquery.Schema) bool {
 func (bq BQ) Setup() error {
 	schema := bq_schema.GetSchema()
 
+	log.SetFormatter(&log.TextFormatter{
+		DisableQuote: true,
+	})
+
 	metadata, err := bq.OutputTable.Metadata(bq.Context)
 	if err == nil && metadata != nil {
 		log.Infof("Found existing BigQuery table: %+v", bq.OutputTable.FullyQualifiedName())
