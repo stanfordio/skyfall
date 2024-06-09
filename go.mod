@@ -9,7 +9,7 @@ require (
 	github.com/DmitriyVTitov/size v1.5.0
 	github.com/bluesky-social/indigo v0.0.0-20240604221852-9815da964ae1
 	github.com/dgraph-io/ristretto v0.1.1
-	github.com/gorilla/websocket v1.5.1
+	github.com/gorilla/websocket v1.5.2
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/ipfs/go-cid v0.4.1
 	github.com/mitchellh/mapstructure v1.5.0
@@ -100,7 +100,7 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/whyrusleeping/cbor v0.0.0-20171005072247-63513f603b11 // indirect
-	github.com/whyrusleeping/cbor-gen v0.1.1 // indirect
+	github.com/whyrusleeping/cbor-gen v0.1.2 // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	gitlab.com/yawning/secp256k1-voi v0.0.0-20230925100816-f2616030848b // indirect
