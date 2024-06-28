@@ -284,7 +284,10 @@ func (h *Hydrator) flattenPost(post *bsky.FeedPost) (result map[string]interface
 	}
 
 	if post.Reply != nil {
-		result["ReplyParentCID"] = post.Reply.Parent.Cid
+		// For some reason replies can lack a parent
+		if post.Reply.Parent != nil {
+			result["ReplyParentCID"] = post.Reply.Parent.Cid
+		}
 	}
 
 	if post.Embed != nil {
