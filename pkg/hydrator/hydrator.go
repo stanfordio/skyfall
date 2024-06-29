@@ -439,8 +439,10 @@ func (h *Hydrator) flattenEmbed(embed *bsky.FeedPost_Embed) (result map[string]i
 				for _, image := range embed.EmbedRecordWithMedia.Media.EmbedImages.Images {
 					mediaResult := make(map[string]interface{})
 					mediaResult["Alt"] = image.Alt
-					mediaResult["BlobLink"] = image.Image.Ref.String()
-					mediaResult["MimeType"] = image.Image.MimeType
+					if image.Image != nil {
+						mediaResult["BlobLink"] = image.Image.Ref.String()
+						mediaResult["MimeType"] = image.Image.MimeType
+					}
 
 					if image.AspectRatio != nil {
 						mediaResult["Width"] = image.AspectRatio.Width
