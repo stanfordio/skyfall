@@ -449,7 +449,6 @@ func (h *Hydrator) flattenEmbed(embed *bsky.FeedPost_Embed) (result map[string]i
 						mediaResult["Height"] = image.AspectRatio.Height
 					}
 
-					mediaResult["MimeType"] = image.Image.MimeType
 					media = append(media, mediaResult)
 				}
 			}
