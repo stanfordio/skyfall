@@ -427,8 +427,10 @@ func (h *Hydrator) flattenEmbed(embed *bsky.FeedPost_Embed) (result map[string]i
 
 	if embed.EmbedRecordWithMedia != nil && embed.EmbedRecordWithMedia.Record != nil {
 		recordEmbedResult := make(map[string]interface{})
-		recordEmbedResult["CID"] = embed.EmbedRecordWithMedia.Record.Record.Cid
-		recordEmbedResult["URI"] = embed.EmbedRecordWithMedia.Record.Record.Uri
+		if embed.EmbedRecordWithMedia.Record.Record != nil {
+			recordEmbedResult["CID"] = embed.EmbedRecordWithMedia.Record.Record.Cid
+			recordEmbedResult["URI"] = embed.EmbedRecordWithMedia.Record.Record.Uri
+		}
 		recordEmbedResult["Type"] = embed.EmbedRecordWithMedia.LexiconTypeID
 
 		media := make([]map[string]interface{}, 0)
