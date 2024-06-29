@@ -434,20 +434,22 @@ func (h *Hydrator) flattenEmbed(embed *bsky.FeedPost_Embed) (result map[string]i
 		recordEmbedResult["Type"] = embed.EmbedRecordWithMedia.LexiconTypeID
 
 		media := make([]map[string]interface{}, 0)
-		if embed.EmbedRecordWithMedia.Media.EmbedImages != nil {
-			for _, image := range embed.EmbedRecordWithMedia.Media.EmbedImages.Images {
-				mediaResult := make(map[string]interface{})
-				mediaResult["Alt"] = image.Alt
-				mediaResult["BlobLink"] = image.Image.Ref.String()
-				mediaResult["MimeType"] = image.Image.MimeType
+		if embed.EmbedRecordWithMedia.Media != nil {
+			if embed.EmbedRecordWithMedia.Media.EmbedImages != nil {
+				for _, image := range embed.EmbedRecordWithMedia.Media.EmbedImages.Images {
+					mediaResult := make(map[string]interface{})
+					mediaResult["Alt"] = image.Alt
+					mediaResult["BlobLink"] = image.Image.Ref.String()
+					mediaResult["MimeType"] = image.Image.MimeType
 
-				if image.AspectRatio != nil {
-					mediaResult["Width"] = image.AspectRatio.Width
-					mediaResult["Height"] = image.AspectRatio.Height
+					if image.AspectRatio != nil {
+						mediaResult["Width"] = image.AspectRatio.Width
+						mediaResult["Height"] = image.AspectRatio.Height
+					}
+
+					mediaResult["MimeType"] = image.Image.MimeType
+					media = append(media, mediaResult)
 				}
-
-				mediaResult["MimeType"] = image.Image.MimeType
-				media = append(media, mediaResult)
 			}
 		}
 		result["EmbedRecordMedia"] = media
