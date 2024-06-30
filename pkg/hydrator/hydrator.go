@@ -502,22 +502,30 @@ func (h *Hydrator) Hydrate(val interface{}, actorDid string) (result map[string]
 	// For types, it can be helpful to look at https://github.com/bluesky-social/indigo/blob/49a1572716a6cccde22022c4264b62acbab43bc2/sonar/sonar.go#L227
 	case *bsky.FeedLike:
 		// Lookup the actual post (basic author info will be included)
-		post, err := h.lookupPost(val.Subject.Uri)
-		if err != nil {
-			log.Warnf("Failed to get post for like: %s", val.Subject.Uri)
-			post = nil
+		if val.Subject != nil {
+			post, err := h.lookupPost(val.Subject.Uri)
+			if err != nil {
+				log.Warnf("Failed to get post for like: %s", val.Subject.Uri)
+				post = nil
+			}
+			full["_LikedPost"] = post
+			projection["LikedPost"] = h.flattenPostView(post)
+		} else {
+			log.Warn("No Subject in Like")
 		}
-		full["_LikedPost"] = post
-		projection["LikedPost"] = h.flattenPostView(post)
 	case *bsky.FeedRepost:
 		// Lookup the actual post (basic author info will be included)
-		post, err := h.lookupPost(val.Subject.Uri)
-		if err != nil {
-			log.Warnf("Failed to get post for repost: %s", val.Subject.Uri)
-			post = nil
+		if val.Subject != nil {
+			post, err := h.lookupPost(val.Subject.Uri)
+			if err != nil {
+				log.Warnf("Failed to get post for repost: %s", val.Subject.Uri)
+				post = nil
+			}
+			full["_RepostedPost"] = post
+			projection["RepostedPost"] = h.flattenPostView(post)
+		} else {
+			log.Warn("No Subject in Repost")
 		}
-		full["_RepostedPost"] = post
-		projection["RepostedPost"] = h.flattenPostView(post)
 	case *bsky.GraphBlock:
 		// Lookup the blocked user
 		profile, err := h.lookupProfile(val.Subject)
