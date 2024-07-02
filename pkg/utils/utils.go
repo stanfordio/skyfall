@@ -51,7 +51,7 @@ func RetryingHTTPClient() *http.Client {
 	retryClient := retryablehttp.NewClient()
 	retryClient.RetryMax = 15
 	retryClient.RetryWaitMin = 1 * time.Second
-	retryClient.RetryWaitMax = 15 * time.Minute
+	retryClient.RetryWaitMax = 120 * time.Minute
 	retryClient.CheckRetry = XRPCRetryPolicy
 	client := retryClient.StandardClient()
 	client.Timeout = 30 * time.Second
@@ -63,7 +63,7 @@ func RetryingHTTPClientExcept429() *http.Client {
 	retryClient := retryablehttp.NewClient()
 	retryClient.RetryMax = 15
 	retryClient.RetryWaitMin = 1 * time.Second
-	retryClient.RetryWaitMax = 15 * time.Minute
+	retryClient.RetryWaitMax = 120 * time.Minute
 	retryClient.CheckRetry = XRPCRetryPolicyExcept429
 	client := retryClient.StandardClient()
 	client.Timeout = 30 * time.Second
