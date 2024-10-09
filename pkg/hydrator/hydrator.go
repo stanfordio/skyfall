@@ -78,6 +78,10 @@ func (h *Hydrator) LookupIdentity(identifier string) (identity *atpidentity.Iden
 	cachedValue, found := h.Cache.Get(key)
 
 	if found && cachedValue != nil {
+		if cachedError, isErr := cachedValue.(error); isErr {
+            log.Debugf("Cached error for %s: %v", identifier, cachedError)
+            return nil, cachedError // Return the cached error
+        }
 		identity = cachedValue.(*atpidentity.Identity)
 		return
 	}
@@ -93,6 +97,7 @@ func (h *Hydrator) LookupIdentity(identifier string) (identity *atpidentity.Iden
 
 	identity, err = h.IdentityDirectory.Lookup(h.Context, *resolvedIdentifier)
 	if err != nil {
+		h.Cache.SetWithTTL(key, err, 0, time.Duration(1)*time.Hour*24)
 		return
 	}
 
