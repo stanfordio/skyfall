@@ -33,6 +33,14 @@ func main() {
 }
 
 func run(args []string) {
+
+	logLevel, err := log.ParseLevel(os.Getenv("LOG_LEVEL"))
+	if err != nil {
+		logLevel = log.InfoLevel
+	}
+
+	log.SetLevel(logLevel)
+
 	app := &cli.App{
 		Name:    "skyfall",
 		Usage:   "A simple CLI for Bluesky data ingest",
