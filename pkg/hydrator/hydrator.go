@@ -117,6 +117,10 @@ func (h *Hydrator) lookupProfileFromIdentity(identity *atpidentity.Identity) (pr
 	cachedValue, found := h.Cache.Get(key)
 
 	if found && cachedValue != nil {
+		if cachedError, isErr := cachedValue.(error); isErr {
+			log.Warnf("Cached error for %s: %v", identity.Handle.String(), cachedError)
+			return nil, cachedError
+		}
 		profile = cachedValue.(*bsky.ActorDefs_ProfileViewDetailed)
 		return
 	}
@@ -124,12 +128,15 @@ func (h *Hydrator) lookupProfileFromIdentity(identity *atpidentity.Identity) (pr
 	h.Ratelimit.Take()
 	profile, err = bsky.ActorGetProfile(h.Context, h.Client, identity.Handle.String())
 
-	// Set the cache
-	if err == nil {
-		h.Cache.SetWithTTL(key, profile, 0, time.Duration(1)*time.Hour*24)
+	if err != nil { // Cache if error looking up profile like suspended
+		log.Warnf("Profile lookup failed for identity %s: %s", identity.Handle.String(), err)
+		h.Cache.SetWithTTL(key, err, 0, time.Duration(1)*time.Hour*24)
+		return nil, err
 	}
 
-	return
+	h.Cache.SetWithTTL(key, profile, 0, time.Duration(1)*time.Hour*24)
+
+	return profile, nil
 }
 
 func (h *Hydrator) lookupProfile(did string) (profile *bsky.ActorDefs_ProfileViewDetailed, err error) {
