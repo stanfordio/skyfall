@@ -38,8 +38,9 @@ func (s *Stream) BeginStreaming(ctx context.Context, workerCount int) error {
 	defer cancel()
 
 	scalingSettings := autoscaling.DefaultAutoscaleSettings()
+	// Start with half the max workers
+	scalingSettings.Concurrency = workerCount / 2
 	scalingSettings.MaxConcurrency = workerCount
-	scalingSettings.AutoscaleFrequency = time.Second
 
 	pool := autoscaling.NewScheduler(scalingSettings, s.SocketURL.Host, s.HandleStreamEvent)
 
