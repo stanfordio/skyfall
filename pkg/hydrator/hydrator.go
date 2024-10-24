@@ -155,6 +155,10 @@ func (h *Hydrator) lookupPost(atUrl string) (post *bsky.FeedDefs_PostView, err e
 	cachedValue, found := h.Cache.Get(key)
 
 	if found && cachedValue != nil {
+		if cachedError, isErr := cachedValue.(error); isErr {
+			log.Warnf("Cached error for %s: %v", atUrl, cachedError)
+			return nil, cachedError
+		}
 		post = cachedValue.(*bsky.FeedDefs_PostView)
 		return
 	}
@@ -163,12 +167,13 @@ func (h *Hydrator) lookupPost(atUrl string) (post *bsky.FeedDefs_PostView, err e
 
 	h.Ratelimit.Take()
 	output, err := bsky.FeedGetPosts(h.Context, h.Client, []string{atUrl})
-	if err != nil {
-		return
-	}
 
 	if len(output.Posts) == 0 {
 		err = fmt.Errorf("no posts found for %s", atUrl)
+	}
+
+	if err != nil { // caching miss so we don't keep checking
+		h.Cache.SetWithTTL(key, err, 0, time.Duration(1)*time.Hour*24)
 		return
 	}
 
