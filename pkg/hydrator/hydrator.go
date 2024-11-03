@@ -251,6 +251,8 @@ func (h *Hydrator) flattenFullProfile(profile *bsky.ActorDefs_ProfileViewDetaile
 }
 
 func (h *Hydrator) flattenFacets(facets []*bsky.RichtextFacet) (hashtags []string, urls []string) {
+	hashtags = []string{}
+	urls = []string{}
 	if facets != nil {
 			for _, facet := range facets {
 					if facet != nil {

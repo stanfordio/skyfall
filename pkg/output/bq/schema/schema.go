@@ -277,6 +277,16 @@ func GetSchema() bigquery.Schema {
 				"type": "INTEGER"
 			},
 			{
+				"mode": "REPEATED",
+				"name": "Hashtags",
+				"type": "STRING"
+			},
+			{
+				"mode": "REPEATED",
+				"name": "URLs",
+				"type": "STRING"
+			},
+			{
 				"name": "Text",
 				"type": "STRING"
 			},
@@ -397,6 +407,16 @@ func GetSchema() bigquery.Schema {
 			},
 			{
 				"name": "ReplyParentCID",
+				"type": "STRING"
+			},
+			{
+				"mode": "REPEATED",
+				"name": "Hashtags",
+				"type": "STRING"
+			},
+			{
+				"mode": "REPEATED",
+				"name": "URLs",
 				"type": "STRING"
 			},
 			{
@@ -565,6 +585,16 @@ func GetSchema() bigquery.Schema {
 			{
 				"name": "RepostCount",
 				"type": "INTEGER"
+			},
+			{
+				"mode": "REPEATED",
+				"name": "Hashtags",
+				"type": "STRING"
+			},
+			{
+				"mode": "REPEATED",
+				"name": "URLs",
+				"type": "STRING"
 			},
 			{
 				"name": "Text",
