@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"cloud.google.com/go/bigquery"
@@ -52,8 +53,21 @@ func New(ctx context.Context, tablePath string, outputChannel chan map[string]in
 	return &bq, nil
 }
 
+func sortSchema(schema bigquery.Schema) {
+	sort.Slice(schema, func(i, j int) bool {
+		return schema[i].Name < schema[j].Name
+	})
+	for _, field := range schema {
+		if field.Type == bigquery.RecordFieldType {
+			sortSchema(field.Schema)
+		}
+	}
+}
+
 // Helper function to compare two schemas
 func schemasAreEqual(schema1, schema2 bigquery.Schema) bool {
+	sortSchema(schema1)
+	sortSchema(schema2)
 	if len(schema1) != len(schema2) {
 		return false
 	}
