@@ -235,8 +235,8 @@ MainLoop:
 
 				values = append(values, value)
 
-				// If there are more than 250 values, write them now
-				if len(values) >= 250 {
+				// If there are more than 500 values, write them now
+				if len(values) >= 500 {
 					break ChannelCollector
 				}
 			default:
