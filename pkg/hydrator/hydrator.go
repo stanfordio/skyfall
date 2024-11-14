@@ -79,9 +79,9 @@ func (h *Hydrator) LookupIdentity(identifier string) (identity *atpidentity.Iden
 
 	if found && cachedValue != nil {
 		if cachedError, isErr := cachedValue.(error); isErr {
-            log.Debugf("Cached error for %s: %v", identifier, cachedError)
-            return nil, cachedError // Return the cached error
-        }
+			log.Debugf("Cached error for %s: %v", identifier, cachedError)
+			return nil, cachedError // Return the cached error
+		}
 		identity = cachedValue.(*atpidentity.Identity)
 		return
 	}
@@ -167,6 +167,11 @@ func (h *Hydrator) lookupPost(atUrl string) (post *bsky.FeedDefs_PostView, err e
 
 	h.Ratelimit.Take()
 	output, err := bsky.FeedGetPosts(h.Context, h.Client, []string{atUrl})
+
+	if err != nil {
+		log.Errorf("Unable to fetch post at %s: %s", atUrl, err)
+		return
+	}
 
 	if len(output.Posts) == 0 {
 		err = fmt.Errorf("no posts found for %s", atUrl)
