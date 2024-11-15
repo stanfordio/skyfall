@@ -118,7 +118,7 @@ func (h *Hydrator) lookupProfileFromIdentity(identity *atpidentity.Identity) (pr
 
 	if found && cachedValue != nil {
 		if cachedError, isErr := cachedValue.(error); isErr {
-			log.Warnf("Cached error for %s: %v", identity.Handle.String(), cachedError)
+			log.Warnf("Found cached error for %s: %v", identity.Handle.String(), cachedError)
 			return nil, cachedError
 		}
 		profile = cachedValue.(*bsky.ActorDefs_ProfileViewDetailed)
