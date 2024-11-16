@@ -49,12 +49,12 @@ func GetLastLine(filepath string) (string, error) {
 
 func RetryingHTTPClient() *http.Client {
 	retryClient := retryablehttp.NewClient()
-	retryClient.RetryMax = 15
+	retryClient.RetryMax = 5
 	retryClient.RetryWaitMin = 1 * time.Second
-	retryClient.RetryWaitMax = 120 * time.Minute
+	retryClient.RetryWaitMax = 5 * time.Minute
 	retryClient.CheckRetry = XRPCRetryPolicy
 	client := retryClient.StandardClient()
-	client.Timeout = 30 * time.Second
+	client.Timeout = 10 * time.Second
 
 	return client
 }

@@ -262,7 +262,7 @@ func streamCmd(cctx *cli.Context) error {
 		return err
 	}
 
-	outputChannel := make(chan map[string]interface{}, 10000)
+	outputChannel := make(chan map[string]interface{}, 512)
 
 	output, err := output.NewOutput(cctx, outputChannel)
 	if err != nil {
