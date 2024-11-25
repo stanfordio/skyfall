@@ -255,6 +255,29 @@ func (h *Hydrator) flattenFullProfile(profile *bsky.ActorDefs_ProfileViewDetaile
 	return
 }
 
+func (h *Hydrator) flattenFacets(facets []*bsky.RichtextFacet) (hashtags []string, urls []string) {
+	hashtags = []string{}
+	urls = []string{}
+	if facets != nil {
+			for _, facet := range facets {
+					if facet != nil {
+							features := facet.Features 
+							for _, feature := range features {
+									if feature.RichtextFacet_Tag != nil {
+											tag := feature.RichtextFacet_Tag.Tag 
+											hashtags = append(hashtags, tag)
+									}
+									if feature.RichtextFacet_Link != nil {
+											url := feature.RichtextFacet_Link.Uri
+											urls = append(urls, url)
+									}
+							}
+					}
+			}
+	}
+	return
+}
+
 func (h *Hydrator) flattenPostView(post *bsky.FeedDefs_PostView) (result map[string]interface{}) {
 	if post == nil {
 		return nil
@@ -287,6 +310,10 @@ func (h *Hydrator) flattenPostView(post *bsky.FeedDefs_PostView) (result map[str
 		result["Embed"] = h.flattenEmbed(rec.Embed)
 	}
 
+	hashtags, urls := h.flattenFacets(rec.Facets)
+	result["Hashtags"] = hashtags
+	result["URLs"] = urls
+
 	return
 }
 
@@ -315,6 +342,10 @@ func (h *Hydrator) flattenPost(post *bsky.FeedPost) (result map[string]interface
 	if post.Embed != nil {
 		result["Embed"] = h.flattenEmbed(post.Embed)
 	}
+
+	hashtags, urls := h.flattenFacets(post.Facets)
+	result["Hashtags"] = hashtags
+	result["URLs"] = urls
 
 	return
 }
