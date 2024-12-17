@@ -6,8 +6,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	comatproto "github.com/bluesky-social/indigo/api/atproto"
@@ -44,6 +46,8 @@ func (s *Stream) BeginStreaming(ctx context.Context, workerCount int) error {
 
 	pool := autoscaling.NewScheduler(scalingSettings, s.SocketURL.Host, s.HandleStreamEvent)
 
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
 	var socketUrl string = s.SocketURL.String()
 	// If we're backfilling, add the backfill seq to the socket url
 	if s.BackfillSeq > 0 {
@@ -62,7 +66,7 @@ func (s *Stream) BeginStreaming(ctx context.Context, workerCount int) error {
 	defer c.Close()
 
 	go func() {
-		err = events.HandleRepoStream(ctx, c, pool)
+		err = events.HandleRepoStream(ctx, c, pool, logger)
 		log.Infof("HandleRepoStream returned unexpectedly: %+v...", err)
 		cancel()
 	}()
