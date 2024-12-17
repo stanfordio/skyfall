@@ -108,7 +108,7 @@ func (h *Hydrator) LookupIdentity(identifier string) (identity *atpidentity.Iden
 
 func (h *Hydrator) lookupProfileFromIdentity(identity *atpidentity.Identity) (profile *bsky.ActorDefs_ProfileViewDetailed, err error) {
 	if identity == nil {
-		return
+		return nil, fmt.Errorf("identity is nil")
 	}
 
 	key := namespaceKey("profile", identity.Handle.String())
@@ -259,21 +259,21 @@ func (h *Hydrator) flattenFacets(facets []*bsky.RichtextFacet) (hashtags []strin
 	hashtags = []string{}
 	urls = []string{}
 	if facets != nil {
-			for _, facet := range facets {
-					if facet != nil {
-							features := facet.Features 
-							for _, feature := range features {
-									if feature.RichtextFacet_Tag != nil {
-											tag := feature.RichtextFacet_Tag.Tag 
-											hashtags = append(hashtags, tag)
-									}
-									if feature.RichtextFacet_Link != nil {
-											url := feature.RichtextFacet_Link.Uri
-											urls = append(urls, url)
-									}
-							}
+		for _, facet := range facets {
+			if facet != nil {
+				features := facet.Features
+				for _, feature := range features {
+					if feature.RichtextFacet_Tag != nil {
+						tag := feature.RichtextFacet_Tag.Tag
+						hashtags = append(hashtags, tag)
 					}
+					if feature.RichtextFacet_Link != nil {
+						url := feature.RichtextFacet_Link.Uri
+						urls = append(urls, url)
+					}
+				}
 			}
+		}
 	}
 	return
 }
