@@ -189,19 +189,25 @@ func (h *Hydrator) lookupPost(atUrl string) (post *bsky.FeedDefs_PostView, err e
 	return
 }
 
-func (h *Hydrator) flattenIdentity(identity *atpidentity.Identity) (result map[string]interface{}) {
+func (h *Hydrator) flattenIdentity(identity *atpidentity.Identity) (result map[string]interface{}, err error) {
 	if identity == nil {
-		return nil
+		return nil, fmt.Errorf("identity is nil")
 	}
 
 	result = make(map[string]interface{})
 
-	var pk crypto.PublicKey
-	pk, _ = identity.PublicKey()
-
 	result["DID"] = identity.Handle.String()
 	result["Handle"] = identity.Handle
-	result["DIDKey"] = pk.DIDKey()
+
+	var pk crypto.PublicKey
+	pk, _ = identity.PublicKey()
+	if err != nil {
+		log.Warnf("Failed to get public key for actor: %s, %s", identity.Handle, err)
+	} else {
+
+		result["DIDKey"] = pk.DIDKey()
+	}
+
 	result["PDS"] = identity.PDSEndpoint()
 
 	return
@@ -531,13 +537,13 @@ func (h *Hydrator) Hydrate(val interface{}, actorDid string) (result map[string]
 	// Resolve full identity and profile information for the actor
 	identity, err := h.LookupIdentity(actorDid)
 	if err != nil {
-		log.Warnf("Failed to get profile for actor: %s", actorDid)
+		log.Warnf("Failed to lookup identity for actor %s: %s", actorDid, err)
 		identity = nil
 	}
 
 	profile, err := h.lookupProfileFromIdentity(identity)
 	if err != nil {
-		log.Warnf("Failed to get profile for actor: %s", actorDid)
+		log.Warnf("Failed to lookup profile for actor %s: %s", actorDid, err)
 		profile = nil
 	}
 
@@ -550,7 +556,12 @@ func (h *Hydrator) Hydrate(val interface{}, actorDid string) (result map[string]
 	full["_ActorDid"] = actorDid
 	full["_ActorIdentity"] = identity
 	full["_ActorProfile"] = profile
-	projection["Actor"] = h.flattenIdentity(identity)
+	flat, err := h.flattenIdentity(identity)
+	if err != nil {
+		log.Warnf("Failed to flatten identity %s: %s", actorDid, err)
+		flat = nil
+	}
+	projection["Actor"] = flat
 
 	// Depending on the type, add additional information
 	switch val := val.(type) {
